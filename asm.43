@@ -73,9 +73,9 @@ setupDisplayAndPorts:
         call    #titleScreen
         mov     #0,R8
         call    #displayNames
-        mov     #0,R8
+        mov     #1,R8
         call    #displaySignedScreenLoopCall
-        mov     #0,R8
+        mov     #1,R8
         call    #askConversion 
         call    #programEnd
         
@@ -205,10 +205,11 @@ endDisplayNames:
 displaySignedScreenLoopCall:
         mov.b #0xB7, &0xA29 ; S
         mov.b #0x28, &0xA26 ; /
-        mov.b #0x6C, &0xA23 ; N (vertical bars)
-        mov.b #0x83, &0xA24 ; N (diagonal part) + ? (dot)
-        mov.b #0xCB, &0xA32 ; ? (shape)
-        mov.b #0x7C, &0xA27
+        mov.b #0x7C, &0xA23 ; U 
+        mov.b #0x00, &0xA24 ; 
+        mov.b #0xC1, &0xA32 ;?
+        mov.b #0x10, &0xA33
+        mov.b #0xB7, &0xA27
         mov.b #0x00, &0xA28
         push.w  R6
         call    #signedInputLoop
@@ -290,8 +291,8 @@ askConversion:
         mov.b   #0x10, &0xA33
         mov.b   #0x00, &0xA2E
         mov.b   #0x00, &0xA2F
-        mov.b   #0x6C, &0xA27
-        mov.b   #0x82, &0xA28
+        mov.b   #0x00, &0xA27
+        mov.b   #0xB0, &0xA28
         push.w  R6
         jmp     askConversionLoop
         
