@@ -40,7 +40,12 @@ YESNO_L  db 0xB0, 0x82
 ;Decimal spaces answers:
 ;             1     2
 Dspace_H db 0x60, 0xDB 
-Dspace_L db 0x20, 0x00   
+Dspace_L db 0x20, 0x00 
+
+; Bits for P,Q answers:
+;Digits      0     1     2     3    4     5     6 
+digitsH db 0xFC, 0X60, 0XDB, 0XF3, 0x67, 0XB7, 0XBF
+digitsL db 0x00, 0X20, 0X00, 0X00, 0X00, 0X00, 0X00
 
         RSEG    CSTACK                  ; pre-declaration of segment
         RSEG    CODE                    ; place program in 'CODE' segment
@@ -318,24 +323,28 @@ endAskConversion:
         pop     R6
         mov     #2,&LCDCMEMCTL
         ret       
-
 ;===================================================================================
 HowManySelection:
         cmp     #0,R4
-        jeq     HowManyEnd
+        jeq     displayBinaryQuantityCall
         cmp     #1,R4
         jeq     askDecimalSpacesCall
         cmp     #2,R4
-        jeq     HowManyEnd
-        jmp     HowManyEnd
+        jeq     displayBinaryQuantityCall
 
 askDecimalSpacesCall:
         call    #askDecimalSpaces
-        ret
-        
-HowManyEnd:
         mov     #2,LCDCMEMCTL
         ret
+        
+displayBinaryQuantityCall:
+        call    #displayBinaryQuantity
+        mov     #2,LCDCMEMCTL
+        ret
+        
+;HowManyEnd:
+;        mov     #2,LCDCMEMCTL
+;        ret
         
 ;====================================================================================
 askDecimalSpaces:
@@ -402,6 +411,75 @@ endDecimalSpace:
         pop     R6
         ret
 
+;=========================================================================================
+; BITS A
+
+displayBinaryQuantity: 
+        mov.b  #0xF1, &0xa29   ;B
+        mov.b  #0x50, &0xA2A   ;B
+        mov.b  #0x90, &0xa25   ;I
+        mov.b  #0x50, &0xa26   ;I
+        mov.b  #0x80, &0xa23   ;T
+        mov.b  #0x50, &0xa24   ;T
+        mov.b  #0xB7, &0xa32   ;S
+        mov.b  #0xC1, &0xA2E   ;?
+        mov.b  #0x10, &0xA2F   ;?
+        mov.b  #0x60, &0xA27 ; 1 (default option)
+        mov.b  #0x20, &0xA28 ; 1 (inner line)
+        push.w  R6
+        push.w  R8
+        mov     #1,R8
+        jmp     quantityLoop
+
+quantityLoop:  
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000100B, R6           ; check if you touched S1
+        jeq     decimalDelay
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000010B, R6
+        jeq     BitsS1P2Delay            ;check here if s2 wa pressed
+        jmp     quantityLoop             ; loopyagain
+
+BitsS1P1Delay:
+        call    #delay
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000100B, R6
+        jeq     quantityLoop
+        jmp     BitsCall
+        
+BitsS1P2Delay:
+        call    #delay
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000010B, R6
+        jeq     quantityLoop
+        jmp     endAskQuantity
+
+BitsCall:
+        mov.b   #0x00, &0xA27
+        mov.b   #0x00, &0xA28
+        jmp     choosingQuantity
+        
+choosingQuantity: 
+        cmp.b   #7,R8
+        jeq     resetBitsIndex
+        mov.b   digitsH(R8),&0xA27
+        mov.b   digitsL(R8),&0xA28 
+        INC     R8
+        jmp     quantityLoop
+        
+resetBitsIndex:
+        clr     R8
+        jmp     choosingQuantity
+        
+endAskQuantity:
+        mov     #2,&LCDCMEMCTL
+        pop     R8
+        pop     R6
+        ret
 ;==========================================================================================
         
 delay:
