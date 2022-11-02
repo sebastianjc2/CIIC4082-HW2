@@ -27,20 +27,26 @@ INDEX4_L db 0x00, 0x82, 0xA0, 0x00
 INDEX5_H db 0x80, 0x00, 0x00, 0x80      ; T,  , Y, T
 INDEX5_L db 0x50, 0x00, 0xB0, 0x50
 
-;Conversion Answer Letters (Y/N): 
-;             Y    N        
-YESNO_H  db 0x00, 0x6C
-YESNO_L  db 0xB0, 0x82
-
 ;Signed or unsigned letters:
 ;             S    U
 SorU_H   db 0xB7, 0x7C
 SorU_L   db 0x00, 0x00
 
+;Conversion Answer Letters (Y/N): 
+;             Y    N        
+YESNO_H  db 0x00, 0x6C
+YESNO_L  db 0xB0, 0x82
+
+;Decimal spaces answers:
+;             1     2
+Dspace_H db 0x60, 0xDB 
+Dspace_L db 0x20, 0x00   
+
         RSEG    CSTACK                  ; pre-declaration of segment
         RSEG    CODE                    ; place program in 'CODE' segment
 
 init:   MOV     #SFE(CSTACK), SP        ; set up stack       
+
 
 main:   NOP                             ; main program
         MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop watchdog timer
@@ -67,33 +73,21 @@ setupDisplayAndPorts:
         mov #2, &LCDCMEMCTL             ; clear LCD memory (resets screen)
         bis #1, &LCDCCTL0               ; turn the LCD on
 
-
-
 	call	#SetUp
         call    #titleScreen
-        mov     #0,R8
-        call    #displayNames
-        mov     #1,R8
+        call    #displayNamesLoopCall
         call    #displaySignedScreenLoopCall
-        mov     #1,R8
-        call    #askConversion 
+        call    #askConversion
+        call    #HowManySelection
         call    #programEnd
         
 ;================================================================================
 SetUp:
-        mov.b   #00000000B, &0xA29
-        mov.b   #00000000B, &0xA2A
-        mov.b   #00000000B, &0xA25
-        mov.b   #00000000B, &0xA26
-        mov.b   #00000000B, &0xA23
-        mov.b   #00000000B, &0xA24
-        mov.b   #00000000B, &0xA32
-        mov.b   #00000000B, &0XA33
-        mov.b   #00000000B, &0xA2E
-        mov.b   #00000000B, &0xA2F
-        mov.b   #00000000B, &0xA27
-        mov.b   #00000000B, &0xA28
 	mov	#2,LCDCMEMCTL
+        mov     #0,R6   ; used for registering button presses
+        mov     #0,R7   ; used for delay purposes
+        mov     #0,R8   ; used for indexing through arrays
+        mov     #0,R9
 	ret  
 ;================================================================================
 ; F(P.Q)
@@ -109,74 +103,32 @@ titleScreen:
         jmp titleScreenInput 
 
 titleScreenInput: ; check s1.1 button presses
-        mov.b   &P1IN, R5               ; copy value of the input signal  
-        and.b   #00000110B, R5          ; bit mask on S1.1
-        cmp.b   #00000100B, R5          ; if S1 was pressed (sets to 0 when pressed)
+        mov.b   &P1IN, R6               ; copy value of the input signal  
+        and.b   #00000110B, R6          ; bit mask on S1.1
+        cmp.b   #00000100B, R6          ; if S1 was pressed (sets to 0 when pressed)
         jeq     titleScreenDelay
         jmp     titleScreenInput
         
 titleScreenDelay:
-        push.w  R7
         call    #delay
-        pop     R7
-        mov.b   &P1IN, R5               ; copy value of the input signal again to check if it was really pressed
-        and.b   #00000110B, R5          ; bit mask on S1.1
-        cmp.b   #00000100B, R5          ; it's no longer pressed and no long presses
+        mov.b   &P1IN, R6               ; copy value of the input signal again to check if it was really pressed
+        and.b   #00000110B, R6          ; bit mask on S1.1
+        cmp.b   #00000100B, R6          ; it's no longer pressed and no long presses
         jeq     titleScreenInput        ; if S1 was NOT released after being pressed or wasn't really pressed correctly
-        pop     R5
+        pop     R6
         mov     #2, &LCDCMEMCTL         ; clear screen
         ret
         
         
 ;============================================================================        
 displayNamesLoopCall:
-        push.w  R6
-        call    #displayNamesLoop
-        pop     R6
-        ret
-        
-displayNamesLoop:
-        mov.b   &P1IN, R6               ; copy value of the input signal  
-        and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000100B, R6          ; if S1 was pressed (sets to 0 when pressed)
-        jeq     displayNamesDelay 
-        mov.b   &P1IN, R6
-        and.b   #00000110B, R6
-        cmp.b   #00000010B, R6
-        jeq     releasedS2InDisplayNames         ;S2 was Pressed
-        
-        jmp     displayNamesLoop        ; wasn't released
+        push.w  R6                      ; used for button presses
+        push.w  R8                      ; used for indexing names
+        mov     #0,R8                   ; start at the first name
+        jmp     displayNames
 
-displayNamesDelay:
-        push.w  R7
-        call    #delay
-        pop     R7
-        mov.b   &P1IN, R6               ; copy value of the input signal to check if button was released after pressing
-        and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000100B, R6
-        jeq     displayNamesLoop
-        jmp     displayNamesCall
-        mov     #2, &LCDCMEMCTL         ; why here?
-        ret
-
-releasedS2InDisplayNames:
-        push.w  R7
-        call    #delay
-        pop     R7
-        mov.b   &P1IN, R6
-        and.b   #00000110B, R6
-        cmp.b   #00000010B, R6
-        jeq     displayNamesLoop
-        jmp     endDisplayNames
-
-displayNamesCall:
-        push.w  R8
-        call    #displayNames
-        pop     R8
-        ret
-        
 displayNames:
-        ;It depends on the content of R8 wich will contain a number from ;0 - 5 representing each name
+        mov     #2,LCDCMEMCTL
         cmp.b   #4, R8
         jeq     resetNameIndex
         mov.b   INDEX0_H (R8), &0xA29
@@ -193,28 +145,57 @@ displayNames:
         mov.b   INDEX5_L (R8), &0xA28
         inc     R8
         jmp     displayNamesLoop        
-        
+
 resetNameIndex:
         clr     R8
         jmp     displayNames
         
+displayNamesLoop:
+        mov.b   &P1IN, R6               ; copy value of the input signal  
+        and.b   #00000110B, R6          ; bit mask on S1.1
+        cmp.b   #00000100B, R6          ; if S1 was pressed (sets to 0 when pressed)
+        jeq     displayNamesDelay 
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000010B, R6          ; if S2 was pressed 
+        jeq     releasedS2InDisplayNames         ;S2 was Pressed 
+        jmp     displayNamesLoop        ; wasn't released
+
+displayNamesDelay:
+        call    #delay
+        mov.b   &P1IN, R6               ; copy value of the input signal to check if button was released after pressing
+        and.b   #00000110B, R6          ; bit mask on S1.1
+        cmp.b   #00000100B, R6          ; if still holding it down: 
+        jeq     displayNamesLoop        ; go back, keep checking for input
+        jmp     displayNames            ; if it was released: then display next name
+
+releasedS2InDisplayNames:
+        call    #delay
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000010B, R6
+        jeq     displayNamesLoop        ; if still pressed, keep checking for input
+        jmp     endDisplayNames         ; if released, stop displaying names. Go to next menu
+ 
 endDisplayNames:
+        pop     R8
+        pop     R6
         mov     #2,LCDCMEMCTL
         ret
 ;===============================================================================
 displaySignedScreenLoopCall:
-        mov.b #0xB7, &0xA29 ; S
-        mov.b #0x28, &0xA26 ; /
-        mov.b #0x7C, &0xA23 ; U 
-        mov.b #0x00, &0xA24 ; 
-        mov.b #0xC1, &0xA32 ;?
-        mov.b #0x10, &0xA33
-        mov.b #0xB7, &0xA27
-        mov.b #0x00, &0xA28
+        mov.b   #0xB7, &0xA29 ; S
+        mov.b   #0x28, &0xA26 ; /
+        mov.b   #0x7C, &0xA23 ; U 
+        mov.b   #0x00, &0xA24 ; 
+        mov.b   #0xC1, &0xA32 ;?
+        mov.b   #0x10, &0xA33
+        mov.b   #0xB7, &0xA27
+        mov.b   #0x00, &0xA28
         push.w  R6
-        call    #signedInputLoop
-        pop     R6
-        ret
+        push.w  R8
+        mov     #1,R8
+        jmp     signedInputLoop
 
 signedInputLoop:
         ; Check S1.1/2 button presses
@@ -229,36 +210,25 @@ signedInputLoop:
         jmp signedInputLoop ; continue to cycle for input
 
 signedS1P1Debounce:
-        push.w  R7
         call    #delay
-        pop     R7
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
         cmp.b   #00000100B,R6
-        jeq     signedInputLoop             ; if still pressed, keep checking
-        setn ; set negative flag -> 1, indicating user wants signed operations
-        jmp     SignedOrUnsignedCall ; both operations for the signed subroutines end the same
-        mov     #2,LCDCMEMCTL
-        ret        
+        jeq     signedInputLoop                 ; if still pressed, keep checking
+        jmp     SignedOrUnsignedCall            ; both operations for the signed subroutines end the same
         
 signedS1P2Debounce:
-        push.w  R7
         call    #delay
-        pop     R7
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6           ; if still pressed
+        cmp.b   #00000010B,R6                   ; if still pressed
         jeq     signedInputLoop
-        clrn 
-        jmp signedEnd ; both operations for the signed subroutines end the same
+        jmp     signedEnd                       ; both operations for the signed subroutines end the same
 
 SignedOrUnsignedCall:
-        push.w  R8
-        mov.b #0x0C, &0xA27     ; clear the U (default value)
-        mov.b #0x00, &0xA28
-        call    #SignedOrUnsigned
-        pop     R8
-        ret
+        mov.b   #0x00, &0xA27                   ; clear the S (default value)
+        mov.b   #0x00, &0xA28
+        jmp     SignedOrUnsigned
        
 SignedOrUnsigned:
         cmp.b   #2,R8
@@ -272,12 +242,11 @@ resetSignedIndex:
         clr     R8
         jmp     SignedOrUnsigned
         
-
 signedEnd:
-        mov #2, &LCDCMEMCTL
+        mov     #2, &LCDCMEMCTL
+        pop     R8
+        pop     R6
         ret
-
-
 
 ;===============================================================================        
 askConversion:
@@ -294,6 +263,8 @@ askConversion:
         mov.b   #0x00, &0xA27
         mov.b   #0xB0, &0xA28
         push.w  R6
+        push.w  R8
+        mov     #1,R8 
         jmp     askConversionLoop
         
 askConversionLoop:
@@ -308,21 +279,16 @@ askConversionLoop:
         jmp     askConversionLoop        ; wasn't released
 
 askConversionDelay:
-        push.w  R7
         call    #delay
-        pop     R7
         mov.b   &P1IN, R6               ; copy value of the input signal to check if button was released after pressing
         and.b   #00000110B, R6          ; bit mask on S1.1
         cmp.b   #00000100B, R6
         jeq     askConversionLoop
         jmp     askConversionCall
-        mov     #2, &LCDCMEMCTL         ; why here?
         ret
 
 releasedS2InAskConversion:
-        push.w  R7
         call    #delay
-        pop     R7
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
         cmp.b   #00000010B, R6
@@ -330,12 +296,9 @@ releasedS2InAskConversion:
         jmp     endAskConversion
 
 askConversionCall:
-        push.w  R8
         mov.b   #0x00, &0xA27
         mov.b   #0x00, &0xA28
-        call    #askConversionYN
-        pop     R8
-        jmp     endAskConversion
+        jmp     askConversionYN
         
 askConversionYN:
         cmp.b   #2,R8
@@ -350,29 +313,110 @@ resetIndex:
         jmp     askConversionYN
         
 endAskConversion:
+        mov     R8,R4
+        pop     R8
         pop     R6
         mov     #2,&LCDCMEMCTL
         ret       
+
+;===================================================================================
+HowManySelection:
+        cmp     #0,R4
+        jeq     HowManyEnd
+        cmp     #1,R4
+        jeq     askDecimalSpacesCall
+        cmp     #2,R4
+        jeq     HowManyEnd
+        jmp     HowManyEnd
+
+askDecimalSpacesCall:
+        call    #askDecimalSpaces
+        ret
         
+HowManyEnd:
+        mov     #2,LCDCMEMCTL
+        ret
         
+;====================================================================================
+askDecimalSpaces:
+        mov.b   #0x60, &0xA29; 1
+        mov.b   #0x20, &0xA2A ; 1 (inner line)
+        mov.b   #0x28, &0xA26 ; /
+        mov.b   #0xDB, &0xA23 ; 2
+        mov.b   #0xCB, &0xA32 ; ?
+        mov.b   #0x60, &0xA27
+        mov.b   #0x20, &0xA28
+        push.w  R6
+        push.w  R8
+        mov     #1,R8
+        jmp     decimalLoop
+
+decimalLoop:
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000100B, R6          ; check if you touched S1
+        jeq     decimalDelay
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000010B, R6
+        jeq     releasedS2InDecimal      ;check here if s2 wa pressed
+        jmp     decimalLoop             ; loopyagain
+
+decimalDelay:
+        call    #delay
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000100B, R6
+        jeq     decimalLoop
+        jmp     decimalCall
         
+releasedS2InDecimal:
+        call    #delay
+        mov.b   &P1IN, R6
+        and.b   #00000110B, R6
+        cmp.b   #00000010B, R6
+        jeq     decimalLoop
+        jmp     endDecimalSpace
+
+
+decimalCall:
+        mov.b   #0x00, &0xA27
+        mov.b   #0x00, &0xA28
+        jmp     decimalOneTwo
+
+decimalOneTwo:
+        cmp.b   #2, R8
+        jeq     resetDecIndex
+        mov.b   Dspace_H(R8), &0xA27 ;1 | 2
+        mov.b   Dspace_L(R8), &0xA28
+        inc     R8
+        jmp     decimalLoop
+
+resetDecIndex:
+        clr     R8
+        jmp     decimalOneTwo
         
-        
-        
+endDecimalSpace:
+        mov     #2, &LCDCMEMCTL
+        pop     R8
+        pop     R6
+        ret
+
+;==========================================================================================
         
 delay:
         push.w  R7
         call    #delay2
         pop     R7
         ret
-delay2:
-        mov     #0xffff,R7       
-next:
-        dec     R7
-        jnz     next
-        ret
         
-
+delay2:
+        mov     #0xffff,R7
+        jmp     next2
+next2:
+        dec     R7
+        jnz     next2
+        ret
         
 programEnd:
         mov     #2, &LCDCMEMCTL
