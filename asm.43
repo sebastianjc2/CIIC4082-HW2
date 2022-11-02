@@ -435,7 +435,7 @@ quantityLoop:
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
         cmp.b   #00000100B, R6           ; check if you touched S1
-        jeq     decimalDelay
+        jeq     BitsS1P1Delay
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
         cmp.b   #00000010B, R6
