@@ -424,8 +424,8 @@ displayBinaryQuantity:
         mov.b  #0xB7, &0xa32   ;S
         mov.b  #0xC1, &0xA2E   ;?
         mov.b  #0x10, &0xA2F   ;?
-        mov.b  #0x60, &0xA27 ; 1 (default option)
-        mov.b  #0x20, &0xA28 ; 1 (inner line)
+        mov.b  #0xFC, &0xA27 ; 0 (default option)
+        mov.b  #0x00, &0xA28 ; 
         push.w  R6
         push.w  R8
         mov     #1,R8
@@ -449,6 +449,7 @@ BitsS1P1Delay:
         cmp.b   #00000100B, R6
         jeq     quantityLoop
         jmp     BitsCall
+        ret                             ; just to test
         
 BitsS1P2Delay:
         call    #delay
