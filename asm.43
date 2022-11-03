@@ -121,8 +121,9 @@ titleScreenDelay:
         call    #delay
         mov.b   &P1IN, R6               ; copy value of the input signal again to check if it was really pressed
         and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000100B, R6          ; it's no longer pressed and no long presses
-        jeq     titleScreenInput        ; if S1 was NOT released after being pressed or wasn't really pressed correctly
+        cmp.b   #00000110B, R6          ; it's no longer pressed and no long presses
+        jne     titleScreenInput        ; (if not released go back) if S1 was NOT released after being pressed or wasn't really pressed correctly ?
+                                        ;(changed to a jne jump to remove bug when S1 is held down)
         pop     R6
         mov     #2, &LCDCMEMCTL         ; clear screen
         ret
@@ -173,17 +174,17 @@ displayNamesDelay:
         call    #delay
         mov.b   &P1IN, R6               ; copy value of the input signal to check if button was released after pressing
         and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000100B, R6          ; if still holding it down: 
-        jeq     displayNamesLoop        ; go back, keep checking for input
-        jmp     displayNames            ; if it was released: then display next name
+        cmp.b   #00000110B, R6          ; (change to check if it was released) if still holding it down: 
+        jeq     displayNames            ; (changed to if released display next name)go back, keep checking for input
+        jmp     displayNamesLoop        ; (changed to if buttons are not released then loop back) if it was released: then display next name
 
 releasedS2InDisplayNames:
         call    #delay
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
-        cmp.b   #00000010B, R6
-        jeq     displayNamesLoop        ; if still pressed, keep checking for input
-        jmp     endDisplayNames         ; if released, stop displaying names. Go to next menu
+        cmp.b   #00000110B, R6
+        jeq     endDisplayNames          ; if still pressed, keep checking for input
+        jmp     displayNamesLoop         ; if released, stop displaying names. Go to next menu
  
 endDisplayNames:
         pop     R8
@@ -221,17 +222,17 @@ signedS1P1Debounce:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     signedInputLoop                 ; if still pressed, keep checking
-        jmp     SignedOrUnsignedCall            ; both operations for the signed subroutines end the same
+        cmp.b   #00000110B,R6
+        jeq     SignedOrUnsignedCall            ; (changed to if released) if still pressed, keep checking
+        jmp     signedInputLoop                 ; both operations for the signed subroutines end the same
         
 signedS1P2Debounce:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6                   ; if still pressed
-        jeq     signedInputLoop
-        jmp     signedEnd                       ; both operations for the signed subroutines end the same
+        cmp.b   #00000110B,R6                   ; (changed to if released) if still pressed
+        jeq     signedEnd
+        jmp     signedInputLoop                 ; both operations for the signed subroutines end the same
 
 SignedOrUnsignedCall:
         mov.b   #0x00, &0xA27                   ; clear the S (default value)
@@ -290,18 +291,18 @@ askConversionDelay:
         call    #delay
         mov.b   &P1IN, R6               ; copy value of the input signal to check if button was released after pressing
         and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000100B, R6
-        jeq     askConversionLoop
-        jmp     askConversionCall
+        cmp.b   #00000110B, R6          ; if S1 released
+        jeq     askConversionCall       
+        jmp     askConversionLoop       ;otherwise go back
         ret
 
 releasedS2InAskConversion:
         call    #delay
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
-        cmp.b   #00000010B, R6
-        jeq     askConversionLoop
-        jmp     endAskConversion
+        cmp.b   #00000110B, R6          ;if released end ask conversion       
+        jeq     endAskConversion
+        jmp     askConversionLoop
 
 askConversionCall:
         mov.b   #0x00, &0xA27
@@ -378,17 +379,17 @@ decimalDelay:
         call    #delay
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
-        cmp.b   #00000100B, R6
-        jeq     decimalLoop
-        jmp     decimalCall
+        cmp.b   #00000110B, R6
+        jeq     decimalCall
+        jmp     decimalLoop
         
 releasedS2InDecimal:
         call    #delay
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
-        cmp.b   #00000010B, R6
-        jeq     decimalLoop
-        jmp     endDecimalSpace
+        cmp.b   #00000110B, R6
+        jeq     endDecimalSpace
+        jmp     decimalLoop
 
 
 decimalCall:
@@ -449,18 +450,18 @@ BitsS1P1Delay:
         call    #delay
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
-        cmp.b   #00000100B, R6
-        jeq     quantityLoop
-        jmp     BitsCall
+        cmp.b   #00000110B, R6
+        jeq     BitsCall
+        jmp     quantityLoop
         ret                             ; just to test
         
 BitsS1P2Delay:
         call    #delay
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
-        cmp.b   #00000010B, R6
-        jeq     quantityLoop
-        jmp     endAskQuantity
+        cmp.b   #00000110B, R6
+        jeq     endAskQuantity
+        jmp     quantityLoop
 
 BitsCall:
         mov.b   #0x00, &0xA27
@@ -519,17 +520,17 @@ Number1S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterNumber1
-        jmp     loopNumber1
+        cmp.b   #00000110B,R6
+        jeq     loopNumber1
+        jmp     enterNumber1
 
 Number1S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterNumber1
-        jmp     enterNumber2
+        cmp.b   #00000110B,R6
+        jeq     enterNumber2
+        jmp     enterNumber1
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -561,17 +562,17 @@ Number2S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterNumber2
-        jmp     loopNumber2
+        cmp.b   #00000110B,R6
+        jeq     loopNumber2
+        jmp     enterNumber2
 
 Number2S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterNumber2
-        jmp     enterNumber3
+        cmp.b   #00000110B,R6
+        jeq     enterNumber3
+        jmp     enterNumber2
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -604,17 +605,17 @@ Number3S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterNumber3
-        jmp     loopNumber3
+        cmp.b   #00000110B,R6
+        jeq     loopNumber3
+        jmp     enterNumber3
 
 Number3S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterNumber3
-        jmp     enterNumber4
+        cmp.b   #00000110B,R6
+        jeq     enterNumber4
+        jmp     enterNumber3
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -646,17 +647,17 @@ Number4S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterNumber4
-        jmp     loopNumber4
+        cmp.b   #00000110B,R6
+        jeq     loopNumber4
+        jmp     enterNumber4
 
 Number4S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterNumber4
-        jmp     enterNumber5
+        cmp.b   #00000110B,R6
+        jeq     enterNumber5
+        jmp     enterNumber4
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -687,17 +688,17 @@ Number5S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterNumber5
-        jmp     loopNumber5
+        cmp.b   #00000110B,R6
+        jeq     loopNumber5
+        jmp     enterNumber5
 
 Number5S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterNumber5
-        jmp     endEnterNumber
+        cmp.b   #00000110B,R6
+        jeq     endEnterNumber
+        jmp     enterNumber5
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -752,17 +753,17 @@ Bit0S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterBit0
-        jmp     loopBit0
+        cmp.b   #00000110B,R6
+        jeq     loopBit0
+        jmp     enterBit0
 
 Bit0S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterBit0
-        jmp     enterBit1
+        cmp.b   #00000110B,R6
+        jeq     enterBit1
+        jmp     enterBit0
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -793,17 +794,17 @@ Bit1S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterBit1
-        jmp     loopBit1
+        cmp.b   #00000110B,R6
+        jeq     loopBit1
+        jmp     enterBit1
 
 Bit1S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterBit1
-        jmp     enterBit2
+        cmp.b   #00000110B,R6
+        jeq     enterBit2
+        jmp     enterBit1
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -835,17 +836,17 @@ Bit2S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterBit2
-        jmp     loopBit2
+        cmp.b   #00000110B,R6
+        jeq     loopBit2
+        jmp     enterBit2
 
 Bit2S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterBit2
-        jmp     enterBit3
+        cmp.b   #00000110B,R6
+        jeq     enterBit3
+        jmp     enterBit2
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -877,17 +878,17 @@ Bit3S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterBit3
-        jmp     loopBit3
+        cmp.b   #00000110B,R6
+        jeq     loopBit3
+        jmp     enterBit3
 
 Bit3S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterBit3
-        jmp     enterBit4
+        cmp.b   #00000110B,R6
+        jeq     enterBit4
+        jmp     enterBit3
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -919,17 +920,17 @@ Bit4S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterBit4
-        jmp     loopBit4
+        cmp.b   #00000110B,R6
+        jeq     loopBit4
+        jmp     enterBit4
 
 Bit4S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterBit4
-        jmp     enterBit5
+        cmp.b   #00000110B,R6
+        jeq     enterBit5
+        jmp     enterBit4
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
@@ -960,17 +961,17 @@ Bit5S1P1Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000100B,R6
-        jeq     enterBit5
-        jmp     loopBit5
+        cmp.b   #00000110B,R6
+        jeq     loopBit5
+        jmp     enterBit5
 
 Bit5S1P2Delay:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000010B,R6
-        jeq     enterBit5
-        jmp     endEnterBit
+        cmp.b   #00000110B,R6
+        jeq     endEnterBit
+        jmp     enterBit5
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
