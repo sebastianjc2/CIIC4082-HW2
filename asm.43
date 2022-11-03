@@ -42,10 +42,9 @@ YESNO_L  db 0xB0, 0x82
 Dspace_H db 0x60, 0xDB 
 Dspace_L db 0x20, 0x00 
 
-; Bits for P,Q answers:
-;Digits      0     1     2     3    4     5     6 
-digitsH db 0xFC, 0X60, 0XDB, 0XF3, 0x67, 0XB7, 0XBF
-digitsL db 0x00, 0X20, 0X00, 0X00, 0X00, 0X00, 0X00
+;Digits    0      1     2     3    4     5     6     7      8     9
+digitsH db 0xFC, 0X60, 0XDB, 0XF3, 0x67, 0XB7, 0XBF, 0Xe0, 0XFF, 0XF7
+digitsL db 0X28, 0X20, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00
 
         RSEG    CSTACK                  ; pre-declaration of segment
         RSEG    CODE                    ; place program in 'CODE' segment
@@ -84,6 +83,7 @@ setupDisplayAndPorts:
         call    #displaySignedScreenLoopCall
         call    #askConversion
         call    #HowManySelection
+        call    #enterNumberSetup
         call    #programEnd
         
 ;================================================================================
@@ -482,6 +482,240 @@ endAskQuantity:
         pop     R6
         ret
 ;==========================================================================================
+
+; Subroutine for selection of decimal or binary number to convert. 
+enterNumberSetup:
+        MOV.W #2 , &LCDCMEMCTL ;CLEAR LCD
+        mov.b #0xFC,&0xa25   ; 0
+        mov.b #0xFC,&0xa23   ; 0
+        mov.b #0x01, &0xa24  ; .
+        mov.b #0xFC,&0xa32   ; 0
+        mov.b #0xFC,&0xa2e   ; 0
+        mov.b #0xFC, &0xa27  ; 0
+        push.w R6
+        push.w R8
+        mov    #0,R10   ; for the sign
+        mov    #1,R11
+        mov    #1,R12
+        mov    #1,R13
+        mov    #1,R14
+        mov    #1,R15
+        
+enterNumber1:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Number1S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Number1S1P2Delay
+        jmp     enterNumber1
+        
+Number1S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterNumber1
+        jmp     loopNumber1
+
+Number1S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterNumber1
+        jmp     enterNumber2
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopNumber1:  
+        CMP.b #10,R11 
+        JEQ resetR11
+        mov.b digitsH(R11),&0xA25
+        mov.b digitsL(R11),&0xA26 
+        inc     R11
+        jmp     enterNumber1
+        
+resetR11: 
+        clr     R11
+        jmp     loopNumber1
+
+        
+enterNumber2:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Number2S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Number2S1P2Delay
+        jmp     enterNumber2
+        
+Number2S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterNumber2
+        jmp     loopNumber2
+
+Number2S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterNumber2
+        jmp     enterNumber3
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopNumber2:  
+        CMP.b   #10,R12 
+        JEQ     resetR12
+        mov.b   digitsH(R12),&0xA23
+        mov.b   digitsL(R12),&0xA24 
+        bis.b   #0x01,&0xa24
+        inc     R12
+        jmp     enterNumber2
+        
+resetR12: 
+        clr     R12
+        jmp     loopNumber2
+
+
+enterNumber3:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Number3S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Number3S1P2Delay
+        jmp     enterNumber3
+        
+Number3S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterNumber3
+        jmp     loopNumber3
+
+Number3S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterNumber3
+        jmp     enterNumber4
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopNumber3:  
+        CMP.b   #10,R13 
+        JEQ     resetR13
+        mov.b   digitsH(R13),&0xA32
+        mov.b   digitsL(R13),&0xA33 
+        inc     R13
+        jmp     enterNumber3
+        
+resetR13: 
+        clr     R13
+        jmp     loopNumber3
+
+
+enterNumber4:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Number4S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Number4S1P2Delay
+        jmp     enterNumber4
+        
+Number4S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterNumber4
+        jmp     loopNumber4
+
+Number4S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterNumber4
+        jmp     enterNumber5
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopNumber4:  
+        CMP.b   #10,R14 
+        JEQ     resetR14
+        mov.b   digitsH(R14),&0xA2E
+        mov.b   digitsL(R14),&0xA2F 
+        inc     R14
+        jmp     enterNumber4
+        
+resetR14: 
+        clr     R14
+        jmp     loopNumber4
+
+enterNumber5:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Number5S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Number5S1P2Delay
+        jmp     enterNumber5
+        
+Number5S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterNumber5
+        jmp     loopNumber5
+
+Number5S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterNumber5
+        jmp     endEnterNumber
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopNumber5:  
+        CMP.b   #10,R15 
+        JEQ     resetR15
+        mov.b   digitsH(R15),&0xA27
+        mov.b   digitsL(R15),&0xA28 
+        inc     R15
+        jmp     enterNumber5
+        
+resetR15: 
+        clr     R15
+        jmp     loopNumber5
+
+endEnterNumber:
+
+        mov     #2,&LCDCMEMCTL
+        ret     
+       
+;==============================================================================
         
 delay:
         push.w  R7
@@ -490,7 +724,7 @@ delay:
         ret
         
 delay2:
-        mov     #0xffff,R7
+        mov     #0x0fff,R7
         jmp     next2
 next2:
         dec     R7
