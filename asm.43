@@ -44,7 +44,11 @@ Dspace_L db 0x20, 0x00
 
 ;Digits    0      1     2     3    4     5     6     7      8     9
 digitsH db 0xFC, 0X60, 0XDB, 0XF3, 0x67, 0XB7, 0XBF, 0Xe0, 0XFF, 0XF7
-digitsL db 0X28, 0X20, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00
+digitsL db 0X00, 0X20, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00
+
+;Bits       0     1 
+bitsH   db 0xFC, 0x60
+bitsL   db 0x00, 0x20
 
         RSEG    CSTACK                  ; pre-declaration of segment
         RSEG    CODE                    ; place program in 'CODE' segment
@@ -82,8 +86,7 @@ setupDisplayAndPorts:
         call    #displayNamesLoopCall
         call    #displaySignedScreenLoopCall
         call    #askConversion
-        call    #HowManySelection
-        call    #enterNumberSetup
+        call    #BitsOrDecimalSelection
         call    #programEnd
         
 ;================================================================================
@@ -324,7 +327,7 @@ endAskConversion:
         mov     #2,&LCDCMEMCTL
         ret       
 ;===================================================================================
-HowManySelection:
+BitsOrDecimalSelection:
         cmp     #0,R4
         jeq     displayBinaryQuantityCall
         cmp     #1,R4
@@ -334,17 +337,17 @@ HowManySelection:
 
 askDecimalSpacesCall:
         call    #askDecimalSpaces
-        mov     #2,LCDCMEMCTL
-        ret
+        call    #enterNumberSetup
+        jmp     BitsOrDecimalEnd
         
 displayBinaryQuantityCall:
         call    #displayBinaryQuantity
+        call    #enterBitsSetup
+        jmp     BitsOrDecimalEnd
+        
+BitsOrDecimalEnd:
         mov     #2,LCDCMEMCTL
         ret
-        
-;HowManyEnd:
-;        mov     #2,LCDCMEMCTL
-;        ret
         
 ;====================================================================================
 askDecimalSpaces:
@@ -483,7 +486,7 @@ endAskQuantity:
         ret
 ;==========================================================================================
 
-; Subroutine for selection of decimal or binary number to convert. 
+; Subroutine for selection of decimal number to convert. 
 enterNumberSetup:
         MOV.W #2 , &LCDCMEMCTL ;CLEAR LCD
         mov.b #0xFC,&0xa25   ; 0
@@ -711,6 +714,279 @@ resetR15:
         jmp     loopNumber5
 
 endEnterNumber:
+
+        mov     #2,&LCDCMEMCTL
+        ret     
+       
+;==============================================================================
+; Subroutine for selection of binary number to convert. 
+enterBitsSetup:
+        MOV.W #2 , &LCDCMEMCTL ;CLEAR LCD
+        mov.b #0xFC,&0xA29   ; 0
+        mov.b #0xFC,&0xa25   ; 0
+        mov.b #0xFC,&0xa23   ; 0
+        mov.b #0xFC,&0xa32   ; 0
+        mov.b #0xFC,&0xa2e   ; 0
+        mov.b #0xFC, &0xa27  ; 0
+        push.w R6
+        push.w R8
+        mov    #1,R10
+        mov    #1,R11
+        mov    #1,R12
+        mov    #1,R13
+        mov    #1,R14
+        mov    #1,R15
+        
+enterBit0:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Bit0S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Bit0S1P2Delay
+        jmp     enterBit0
+        
+Bit0S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterBit0
+        jmp     loopBit0
+
+Bit0S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterBit0
+        jmp     enterBit1
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopBit0:  
+        CMP.b #2,R10 
+        JEQ resetR10Bit
+        mov.b bitsH(R10),&0xA29
+        mov.b bitsL(R10),&0xA2A 
+        inc     R10
+        jmp     enterBit0
+        
+resetR10Bit: 
+        clr     R10
+        jmp     loopBit0        
+
+enterBit1:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Bit1S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Bit1S1P2Delay
+        jmp     enterBit1
+        
+Bit1S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterBit1
+        jmp     loopBit1
+
+Bit1S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterBit1
+        jmp     enterBit2
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopBit1:  
+        CMP.b #2,R11 
+        JEQ resetR11Bit
+        mov.b bitsH(R11),&0xA25
+        mov.b bitsL(R11),&0xA26 
+        inc     R11
+        jmp     enterBit1
+        
+resetR11Bit: 
+        clr     R11
+        jmp     loopBit1
+
+        
+enterBit2:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Bit2S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Bit2S1P2Delay
+        jmp     enterBit2
+        
+Bit2S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterBit2
+        jmp     loopBit2
+
+Bit2S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterBit2
+        jmp     enterBit3
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopBit2:  
+        CMP.b   #2,R12 
+        JEQ     resetR12Bit
+        mov.b   bitsH(R12),&0xA23
+        mov.b   bitsL(R12),&0xA24 
+        inc     R12
+        jmp     enterBit2
+        
+resetR12Bit: 
+        clr     R12
+        jmp     loopBit2
+
+
+enterBit3:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Bit3S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Bit3S1P2Delay
+        jmp     enterBit3
+        
+Bit3S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterBit3
+        jmp     loopBit3
+
+Bit3S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterBit3
+        jmp     enterBit4
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopBit3:  
+        CMP.b   #2,R13 
+        JEQ     resetR13Bit
+        mov.b   bitsH(R13),&0xA32
+        mov.b   bitsL(R13),&0xA33 
+        inc     R13
+        jmp     enterBit3
+        
+resetR13Bit: 
+        clr     R13
+        jmp     loopBit3
+
+
+enterBit4:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Bit4S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Bit4S1P2Delay
+        jmp     enterBit4
+        
+Bit4S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterBit4
+        jmp     loopBit4
+
+Bit4S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterBit4
+        jmp     enterBit5
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopBit4:  
+        CMP.b   #2,R14 
+        JEQ     resetR14Bit
+        mov.b   bitsH(R14),&0xA2E
+        mov.b   bitsL(R14),&0xA2F 
+        inc     R14
+        jmp     enterBit4
+        
+resetR14Bit: 
+        clr     R14
+        jmp     loopBit4
+
+enterBit5:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Bit5S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Bit5S1P2Delay
+        jmp     enterBit5
+        
+Bit5S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000100B,R6
+        jeq     enterBit5
+        jmp     loopBit5
+
+Bit5S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     enterBit5
+        jmp     endEnterBit
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopBit5:  
+        CMP.b   #2,R15 
+        JEQ     resetR15Bit
+        mov.b   bitsH(R15),&0xA27
+        mov.b   bitsL(R15),&0xA28 
+        inc     R15
+        jmp     enterBit5
+        
+resetR15Bit: 
+        clr     R15
+        jmp     loopBit5
+
+endEnterBit:
 
         mov     #2,&LCDCMEMCTL
         ret     
