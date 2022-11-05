@@ -1,3 +1,20 @@
+;Register Uses
+; R4: Stores 1 if D->B, stores 0 if B->D
+; R5: Stores 1 if signed, stores 0 if unsigned
+; R6: used for helping read user input from buttons
+; R7: used for delay inside it's own subroutine,
+;     stores how many integers for a decimal input (1 or 2)
+;     1 if 1 integer, 2 if 2 integers
+; R8: used to index through arrays in the screens
+; R9: used to store the whole part's index of the binary number to index through
+; R10: used to store the sign for both decimal (+=1, 0=-) and binaries (1=neg or 0=pos)
+; R11-R15: used to store the numbers being inputted
+; R12: also stores the whole Part of a binary->dec (the P) later
+; R13: also used as an index for the bin-> dec conversion sum
+; R14: Stores the user input for bin -> dec conversion
+; R15: also used in bin->dec as a placeholder
+
+
 #include "msp430.h"                     ; #define controlled include file
 
         NAME    main                    ; module name
@@ -50,8 +67,43 @@ digitsL db 0X00, 0X20, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00, 0X00
 bitsH   db 0xFC, 0x60
 bitsL   db 0x00, 0x20
 
+; signs
+signs_H db 0x03, 0x03 ; + (POS), - (NEG)
+signs_L db 0x50, 0x00
+
+;inputBits:
+bitResult db 00000000B
+;101101 P=3 D=3
+;conversions:
+wholePart    db 1,2,4,8,16,32
+decimalPart1 db 5,0,0,0,0,0
+decimalPart2 db 2,5,0,0,0,0
+decimalPart3 db 1,2,5,0,0,0
+decimalPart4 db 0,6,2,5,0,0
+decimalPart5 db 0,3,1,2,5,0
+decimalPart6 db 0,1,5,6,2,5
+decimalPartTotal db 0,0,0,0,0,0; if input 101111, p-0, q=6 => 6,12,13,13,7,5 => 7,3,4,3,7,5
+
+; bit "sign" storer
+bitSign db 00000000B
+
+; stores if Signed or Unsigned
+isItSigned db 00000000B
+
+;displayAddresses for the bin->dec
+highBitAddress db  0xA25,0xA23,0xA32,0xA2E,0xA27   
+lowBitAddress  db  0xA26,0xA24,0xA33,0xA2F,0xA28
+
+;inputDecimal
+decimalNum  db 0,0,0,0,0,0
+decimalWhole db 0,0,0,0,0,0
+decimalFractional db 0,0,0,0,0,0
+
+
         RSEG    CSTACK                  ; pre-declaration of segment
         RSEG    CODE                    ; place program in 'CODE' segment
+
+
 
 init:   MOV     #SFE(CSTACK), SP        ; set up stack       
 
@@ -87,15 +139,32 @@ setupDisplayAndPorts:
         call    #displaySignedScreenLoopCall
         call    #askConversion
         call    #BitsOrDecimalSelection
-        call    #programEnd
+        call    #FinalChoice
+        call    #main                   ; loop if they pressed S1P1 on FinalChoice
         
 ;================================================================================
 SetUp:
+        push.w  R6
+        mov     #0,R6
+        mov.b   #0,decimalPartTotal(R6)
+        pop     R6
+        and.b   #00000000B,bitResult
 	mov	#2,LCDCMEMCTL
+        clrc
+        clrN
+        clrZ
+        mov     #0,R4
+        mov     #0,R5
         mov     #0,R6   ; used for registering button presses
         mov     #0,R7   ; used for delay purposes
         mov     #0,R8   ; used for indexing through arrays
         mov     #0,R9
+        mov     #0,R10
+        mov     #0,R11
+        mov     #0,R12
+        mov     #0,R13
+        mov     #0,R14
+        mov     #0,R15        
 	ret  
 ;================================================================================
 ; F(P.Q)
@@ -107,7 +176,7 @@ titleScreen:
         mov.b #0xFC, &0xA32 ; Q
         mov.b #0x02, &0xA33 ; Q (inner line)
         mov.b #0x88, &0xA2F ; )
-        push.w R5 ; store original register value
+        push.w R6 ; store original register value
         jmp titleScreenInput 
 
 titleScreenInput: ; check s1.1 button presses
@@ -253,6 +322,7 @@ resetSignedIndex:
         
 signedEnd:
         mov     #2, &LCDCMEMCTL
+        mov     R8,R5                           ; R5 will store if it's signed or unsigned
         pop     R8
         pop     R6
         ret
@@ -322,7 +392,7 @@ resetIndex:
         jmp     askConversionYN
         
 endAskConversion:
-        mov     R8,R4
+        mov     R8,R4                   ; R4 will have if it's decimal or binary conversion
         pop     R8
         pop     R6
         mov     #2,&LCDCMEMCTL
@@ -339,16 +409,64 @@ BitsOrDecimalSelection:
 askDecimalSpacesCall:
         call    #askDecimalSpaces
         call    #enterNumberSetup
+        call    #storeDecimalInputInArraySetup
         jmp     BitsOrDecimalEnd
         
 displayBinaryQuantityCall:
         call    #displayBinaryQuantity
         call    #enterBitsSetup
+        call    #decimalResultFromBinary
         jmp     BitsOrDecimalEnd
         
 BitsOrDecimalEnd:
-        mov     #2,LCDCMEMCTL
+        ;call    #FinalChoice
+        ;mov     #2,LCDCMEMCTL
         ret
+;====================================================================================
+storeDecimalInputInArraySetup:
+        push.w  R6
+        mov     #0,R6
+        dec     R11
+        dec     R12
+        dec     R13
+        dec     R14
+        dec     R15
+        
+storeDecimalInputInArray:
+        mov.b   R11,decimalNum(R6)
+        mov.b   decimalNum(R6),R7
+        inc     R6
+        mov.b   R12,decimalNum(R6)
+        mov.b   decimalNum(R6),R7
+        inc     R6
+        mov.b   R13,decimalNum(R6)
+        mov.b   decimalNum(R6),R7
+        inc     R6
+        mov.b   R14,decimalNum(R6)
+        mov.b   decimalNum(R6),R7
+        inc     R6
+        mov.b   R15,decimalNum(R6)
+        mov.b   decimalNum(R6),R7
+        pop     R6
+        ret
+;====================================================================================
+splittingWholeAndFract:
+        push.w  R6                      ; will be used as counter/index
+        push.w  R8                      ; used to multiply by 10
+        push.w  R5                      ; used to store the number of integers
+        mov     R7,R5                   ; store how many integers selected on R5
+        mov     #5,R6                   ; total of integers (5)
+        sub     R7,R6                   ; R6 is now Q (5-p)
+        mov     R6,R7                   ; R7 is now Q
+        add     R7,R5                   ; R5 + R7 = R5 = (p+q)
+        mov     #0,R6                   ; init the iterator
+        mov     #0,R12                  ; result
+        mov     #0,R15                  ; result
+        mov     #10,R14                 ; factor
+
+decimalIntegerPart:
+        ret
+        
         
 ;====================================================================================
 askDecimalSpaces:
@@ -411,6 +529,7 @@ resetDecIndex:
         
 endDecimalSpace:
         mov     #2, &LCDCMEMCTL
+        mov     R8,R7 ; stores how many integers for a decimal input (1 or 2)
         pop     R8
         pop     R6
         ret
@@ -481,29 +600,83 @@ resetBitsIndex:
         jmp     choosingQuantity
         
 endAskQuantity:
-        mov     #2,&LCDCMEMCTL
+        
+        dec     R8
+        mov.b   R8,R4      ; R4 will have how many bits were selected
         pop     R8
         pop     R6
+        mov     #2,&LCDCMEMCTL
         ret
 ;==========================================================================================
-
 ; Subroutine for selection of decimal number to convert. 
 enterNumberSetup:
         MOV.W #2 , &LCDCMEMCTL ;CLEAR LCD
         mov.b #0xFC,&0xa25   ; 0
         mov.b #0xFC,&0xa23   ; 0
-        mov.b #0x01, &0xa24  ; .
         mov.b #0xFC,&0xa32   ; 0
         mov.b #0xFC,&0xa2e   ; 0
         mov.b #0xFC, &0xa27  ; 0
+        call   #setPoint
         push.w R6
         push.w R8
-        mov    #0,R10   ; for the sign
+        mov    #1,R10   ; for the sign
         mov    #1,R11
         mov    #1,R12
         mov    #1,R13
         mov    #1,R14
         mov    #1,R15
+        
+CheckSign:
+        cmp     #1,R5   ; it's signed
+        jne     enterNumber1    ; ignore the sign
+        mov.b     #0x03,&0xA29    ; + sign (default)
+        mov.b     #0x50,&0xA2A    ; + sign (default)
+        
+enterNumber0:
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        CMP.b   #00000100B,R6
+        jeq     Number0S1P1Delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000010B,R6
+        jeq     Number0S1P2Delay
+        jmp     enterNumber0
+        
+Number0S1P1Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000110B,R6
+        jeq     loopNumber0
+        jmp     enterNumber0
+
+Number0S1P2Delay:
+        call    #delay
+        mov.b   &P1IN,R6
+        and.b   #00000110B,R6
+        cmp.b   #00000110B,R6
+        mov     R10,R8                  ; stores which sign was selected (1=+, 0=-)
+        jeq     enterNumber1
+        jmp     enterNumber0
+;checkSign:;Check which sign was selected. 
+;        JEQ enterValue1
+
+loopNumber0:
+        mov.b   #0x00,&0xA29            ; clear the default sign
+        mov.b   #0x00,&0xA30            ; clear the default sign
+        CMP.b   #2,R10 
+        JEQ     resetR10
+        mov.b   signs_H(R10),&0xA29
+        mov.b   signs_L(R10),&0xA2A 
+        inc     R10
+        jmp     enterNumber0
+        
+resetR10: 
+        clr     R10
+        jmp     loopNumber0
+
+
         
 enterNumber1:
         mov.b   &P1IN,R6
@@ -535,12 +708,26 @@ Number1S1P2Delay:
 ;        JEQ enterValue1
 
 loopNumber1:  
+        cmp.b #2,R7
+        jeq   loopNumber1Cap6
         CMP.b #10,R11 
         JEQ resetR11
+        
         mov.b digitsH(R11),&0xA25
-        mov.b digitsL(R11),&0xA26 
+        mov.b digitsL(R11),&0xA26
+        call  #setPoint
         inc     R11
         jmp     enterNumber1
+        
+loopNumber1Cap6:  
+        CMP.b #7,R11 
+        JEQ resetR11
+        
+        mov.b digitsH(R11),&0xA25
+        mov.b digitsL(R11),&0xA26
+        call  #setPoint
+        inc     R11
+        jmp     enterNumber1        
         
 resetR11: 
         clr     R11
@@ -577,13 +764,26 @@ Number2S1P2Delay:
 ;        JEQ enterValue1
 
 loopNumber2:  
+        cmp.b   #7,R11
+        jeq     loopNumber2Cap3
         CMP.b   #10,R12 
         JEQ     resetR12
         mov.b   digitsH(R12),&0xA23
         mov.b   digitsL(R12),&0xA24 
-        bis.b   #0x01,&0xa24
+        call    #setPoint
         inc     R12
         jmp     enterNumber2
+        
+loopNumber2Cap3:  
+        cmp.b   #4,R12                  ; 4 in R12 means the units was 3, and we also checked
+                                        ; if R11 was 7 which means the tens was 6. 63 is max value
+        JEQ     resetR12
+        mov.b   digitsH(R12),&0xA23
+        mov.b   digitsL(R12),&0xA24 
+        call    #setPoint
+        inc     R12
+        jmp     enterNumber2
+        
         
 resetR12: 
         clr     R12
@@ -620,6 +820,18 @@ Number3S1P2Delay:
 ;        JEQ enterValue1
 
 loopNumber3:  
+        cmp     #7,R11                  ; tens is 6
+        jne     notMaxValue
+        cmp     #4,R12                  ; units is 3
+        jne     notMaxValue
+        cmp.b   #1,R13
+        jeq     resetR13
+        mov.b   digitsH(R13),&0xA32
+        mov.b   digitsL(R13),&0xA33 
+        inc     R13
+        jmp     enterNumber3
+        
+notMaxValue:
         CMP.b   #10,R13 
         JEQ     resetR13
         mov.b   digitsH(R13),&0xA32
@@ -661,7 +873,19 @@ Number4S1P2Delay:
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
-loopNumber4:  
+loopNumber4:
+        cmp     #7,R11                  ; tens is 6
+        jne     notMaxValue2
+        cmp     #4,R12                  ; units is 3
+        jne     notMaxValue2
+        cmp.b   #1,R14
+        jeq     resetR14
+        mov.b   digitsH(R14),&0xA2E
+        mov.b   digitsL(R14),&0xA2F 
+        inc     R14
+        jmp     enterNumber4
+
+notMaxValue2:  
         CMP.b   #10,R14 
         JEQ     resetR14
         mov.b   digitsH(R14),&0xA2E
@@ -702,7 +926,19 @@ Number5S1P2Delay:
 ;checkSign:;Check which sign was selected. 
 ;        JEQ enterValue1
 
-loopNumber5:  
+loopNumber5: 
+        cmp     #7,R11                  ; tens is 6
+        jne     notMaxValue3
+        cmp     #4,R12                  ; units is 3
+        jne     notMaxValue3
+        cmp.b   #1,R15
+        jeq     resetR15
+        mov.b   digitsH(R15),&0xA27
+        mov.b   digitsL(R15),&0xA28 
+        inc     R15
+        jmp     enterNumber5
+
+notMaxValue3:
         CMP.b   #10,R15 
         JEQ     resetR15
         mov.b   digitsH(R15),&0xA27
@@ -715,7 +951,8 @@ resetR15:
         jmp     loopNumber5
 
 endEnterNumber:
-
+        pop     R8
+        pop     R6
         mov     #2,&LCDCMEMCTL
         ret     
        
@@ -730,7 +967,6 @@ enterBitsSetup:
         mov.b #0xFC,&0xa2e   ; 0
         mov.b #0xFC, &0xa27  ; 0
         push.w R6
-        push.w R8
         mov    #1,R10
         mov    #1,R11
         mov    #1,R12
@@ -758,6 +994,15 @@ Bit0S1P1Delay:
         jmp     enterBit0
 
 Bit0S1P2Delay:
+        mov     bitSign,R7
+        mov     R10,bitSign
+        mov     bitSign,R7
+        dec     R10
+        cmp     #1,R10
+        jne     Zero1
+        add     #00100000B, bitResult
+        mov.b   bitResult, R9 ;for debugging purposes
+    Zero1:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
@@ -799,6 +1044,12 @@ Bit1S1P1Delay:
         jmp     enterBit1
 
 Bit1S1P2Delay:
+        dec     R11
+        cmp     #1,R11
+        jne     Zero2
+        add     #00010000B, bitResult
+        mov.b   bitResult, R9 ;for debugging purposes
+    Zero2:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
@@ -841,6 +1092,12 @@ Bit2S1P1Delay:
         jmp     enterBit2
 
 Bit2S1P2Delay:
+        dec     R12
+        cmp     #1,R12
+        jne     Zero3
+        add     #00001000B, bitResult
+        mov.b   bitResult, R9 ;for debugging purposes
+    Zero3:    
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
@@ -883,6 +1140,12 @@ Bit3S1P1Delay:
         jmp     enterBit3
 
 Bit3S1P2Delay:
+        dec     R13
+        cmp     #1,R13
+        jne     Zero4
+        add     #00000100B, bitResult
+        mov.b   bitResult, R9 ;for debugging purposes
+    Zero4:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
@@ -925,6 +1188,12 @@ Bit4S1P1Delay:
         jmp     enterBit4
 
 Bit4S1P2Delay:
+        dec     R14
+        cmp     #1,R14
+        jne     Zero5
+        add     #00000010B, bitResult
+        mov.b   bitResult, R9 ;for debugging purposes
+    Zero5:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
@@ -966,6 +1235,13 @@ Bit5S1P1Delay:
         jmp     enterBit5
 
 Bit5S1P2Delay:
+        dec     R15
+        cmp     #1,R15
+        jne     Zero6
+        add     #00000001B, bitResult
+        mov.b   bitResult, R9 ;for debugging purposes
+     Zero6:
+        mov.b   bitResult, R9
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
@@ -988,12 +1264,410 @@ resetR15Bit:
         jmp     loopBit5
 
 endEnterBit:
-
         mov     #2,&LCDCMEMCTL
+        pop     R6
         ret     
-       
-;==============================================================================
+
+;===============================================================================
+decimalResultFromBinary:
+        mov     #2,LCDCMEMCTL
+        push.w  R4
+        mov     R5,isItSigned
+        cmp     #1,isItSigned           ; if equal, would mean it's signed
+        jne     skip2scomp    
+        mov     bitSign,R10
+        cmp     #1,R10                 ; if equal, would mean it's a negative number  
+        jeq     skip2scomp             ; so skip 2s comp
+        ;else do 2s comp to the input
+        mov.b   bitResult,R4            ; preparing for 2s comp
+        xor.b   #0xFF,R4                      ; 2s comp
+        inc     R4                      ; 2s comp
+        mov.b   R4,bitResult            ; 2s comp
+        pop     R4
+        cmp     #1,isItSigned           ; 1 = signed
+        jne     skip2scomp
+        mov.b   #0x03,&0xA29
+    skip2scomp:
+        mov.b   #0,R7                    ;count for clear0
+        mov.b   #0,R8                    ;count for fractionalPart
+        mov.b   R4,R9                    ;wholePart Index
+
+        mov.b   R4,R10                   ;P
+        mov.b   #6,R11                   ;Q (6-P)
+        sub     R10,R11
+        mov.b   #0,R12                   ;Total whole part
+        mov.b   #0,R13                   ;index for sum
+        mov.b   bitResult,R14            ;User Input
         
+    clear0:                              ;clear 0s to the left of the input
+        rla     R14
+        inc     R7
+        cmp     #10,R7
+        jne     clear0
+        ;-------------------
+        cmp     #0, R10                 ;if everything is fractional part
+        jeq     startFractionalPart
+        ;-------------------
+    roll:
+        dec     R9                       ;is index so subtract 1
+        rla     R14
+        jnc     skip
+        mov.b   wholePart(R9),R15
+        add     R15,R12
+    skip:
+        cmp     #0,R9
+        jne     roll
+        
+        ;--------------------------
+        cmp     #0,R11                  ;if everything is whole part
+        jeq     displayBinaryResult
+        ;--------------------------
+         
+startFractionalPart:
+        cmp     R8,R11
+        jeq     displayBinaryResult
+        rla     R14
+        jc      sumFractionalPart
+        inc     R8
+        jmp     startFractionalPart
+sumFractionalPart:
+        mov.b   #0,R13
+        clrc
+    ;---
+        cmp     #0,R8
+        clrc
+        jne     skip1
+    loop1:
+        mov.b   decimalPart1(R13),R7
+        mov.b   decimalPartTotal(R13),R7
+        addc.b    decimalPart1(R13),decimalPartTotal(R13)
+        mov.b   decimalPartTotal(R13),R7
+        inc     R13
+        cmp     R11,R13
+        clrc
+        jne     loop1
+        
+    skip1:
+        cmp     #1,R8
+        clrc
+        jne     skip2
+      loop2:
+        mov.b   decimalPart2(R13),R7
+        mov.b   decimalPartTotal(R13),R7
+        addc.b    decimalPart2(R13),decimalPartTotal(R13)
+        mov.b   decimalPartTotal(R13),R7
+        inc     R13
+        cmp     R11,R13
+        clrc
+        jne     loop2
+        
+    skip2:
+        cmp     #2,R8
+        clrc
+        jne     skip3
+      loop3:
+        mov.b   decimalPart3(R13),R7
+        mov.b   decimalPartTotal(R13),R7
+        addc.b    decimalPart3(R13),decimalPartTotal(R13)
+        mov.b   decimalPartTotal(R13),R7
+        inc     R13
+        cmp     R11,R13
+        clrc
+        jne     loop3
+        
+    skip3:
+        cmp     #3,R8
+        clrc
+        jne     skip4
+      loop4:
+        mov.b   decimalPart4(R13), R7
+        mov.b   decimalPartTotal(R13), R7
+        addc.b    decimalPart4(R13),decimalPartTotal(R13)
+        mov.b   decimalPartTotal(R13), R7
+        inc     R13
+        cmp     R11,R13
+        clrc
+        jne     loop4
+        
+    skip4:
+        cmp     #4,R8
+        clrc
+        jne     skip5
+      loop5:
+        mov.b   decimalPart5(R13), R7
+        mov.b   decimalPartTotal(R13),R7
+        addc.b    decimalPart5(R13),decimalPartTotal(R13)
+        mov.b   decimalPartTotal(R13),R7
+        inc     R13
+        cmp     R11,R13
+        clrc
+        jne     loop5
+        
+    skip5:
+        cmp     #5,R8
+        clrc
+        jne     skip6
+      loop6:
+        mov.b   decimalPart6(R13),R7
+        mov.b   decimalPartTotal(R13),R7
+        addc.b    decimalPart6(R13),decimalPartTotal(R13)
+        mov.b   decimalPartTotal(R13),R7
+        inc     R13
+        cmp     R11,R13
+        clrc
+        jne     loop6
+        
+    skip6:
+        
+        inc     R8
+        jmp     startFractionalPart
+        
+displayBinaryResult: ;-------from here changed
+        mov.b   #0,R15          ;whole part has not taken up any displays yet
+        mov.b   #0, R8
+        cmp     #0,R12
+        jeq     endOfWholePartDisplay
+    wholePartDisplays:
+        cmp     #10,R12
+        jl      skipSub
+        sub     #10,R12
+        inc     R8
+        jmp     wholePartDisplays
+    skipSub:
+        jmp displayWholePart
+    
+    endOfWholePartDisplay:
+        
+        jmp     displayFractionalPart
+    
+    endOfFractionalPartDisplay:
+        jmp     endBDConversion
+
+displayFractionalPart:
+        cmp     #0, R11
+        jeq     finishedEditTotal
+        mov.b   R11,R6
+        dec     R6
+        ;edit decimalPartTotal so that carries are done correctly ex.:
+        ;if input 101111, p=0,d=6, =>6,12,13,13,7,5 => 7,3,4,3,7,5
+    editTotal:
+        
+        mov.b   decimalPartTotal(R6),R4 
+        cmp     #10,R4
+        jl      dontSub
+        sub.b     #10,decimalPartTotal(R6)
+        mov.b   decimalPartTotal(R6),R5;debugging
+        dec     R6
+        mov.b   decimalPartTotal(R6),R4
+        inc     R4
+        mov.b   R4,decimalPartTotal(R6)
+        mov.b   decimalPartTotal(R6),R5;debugging
+        jmp     subtracted
+    dontSub:
+        dec     R6
+    subtracted:
+        cmp     #0,R6   
+        jeq     finishedEditTotal
+        jmp     editTotal
+    
+    finishedEditTotal:
+        ;R15 should hold the number 
+        mov.b   #0,R5           ;register seems to be needed to index the array "decimalPartTotal"
+    ;etiqueta "display" para mejorar el "readability"
+    display:
+                        ;second,third,fourth,fifth,sixth (first one is for the sign)
+        mov.b   #5,R14                  ;total amount of displays
+        sub     R15,R14                 ;minus displays already taken up
+        cmp     #5,R14
+        jeq     display5Times
+        cmp     #4,R14
+        jeq     display4Times
+        cmp     #3,R14
+        jeq     display3Times
+    
+    display5Times:
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA25
+        mov.b   digitsL(R4),&0xA26
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA23
+        mov.b   digitsL(R4),&0xA24
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA32
+        mov.b   digitsL(R4),&0xA33
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA2E
+        mov.b   digitsL(R4),&0xA2F
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA27
+        mov.b   digitsL(R4),&0xA28
+        inc     R5
+        jmp     endOfFractionalPartDisplay
+    display4Times:
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA23
+        mov.b   digitsL(R4),&0xA24
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA32
+        mov.b   digitsL(R4),&0xA33
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA2E
+        mov.b   digitsL(R4),&0xA2F
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA27
+        mov.b   digitsL(R4),&0xA28
+        inc     R5
+        jmp     endOfFractionalPartDisplay
+    display3Times:
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA32
+        mov.b   digitsL(R4),&0xA33
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA2E
+        mov.b   digitsL(R4),&0xA2F
+        inc     R5
+        mov.b   decimalPartTotal(R5),R4
+        mov.b   digitsH(R4),&0xA27
+        mov.b   digitsL(R4),&0xA28
+        inc     R5
+        
+      
+        
+        jmp     endOfFractionalPartDisplay
+
+displayWholePart:
+        cmp     #0,R8
+        jeq     onlyOneDigit
+        mov.b   digitsH(R8), &0xA25
+        mov.b   digitsL(R8), &0xA26
+        
+secondDigit: ;-------------------------second digit displayed (wholePart)
+        mov.b   digitsH(R12), &0xA23
+        mov.b   digitsL(R12), &0xA24
+        bis.b   #1,&0xA24
+        mov.b   #2,R15                  ;spaces taken up
+        jmp     endOfWholePartDisplay
+        
+onlyOneDigit:
+        mov.b   digitsH(R12), &0xA25
+        mov.b   digitsL(R12), &0xA26
+        bis.b   #1,&0xA26
+        mov.b   #1,R15                  ;spaces taken up
+        jmp     endOfWholePartDisplay
+        
+endBDConversion:
+        ret
+
+;==============================================================================
+FinalChoice: ; check s1.1 button presses
+        mov.b   &P1IN, R6               ; copy value of the input signal  
+        and.b   #00000110B, R6          ; bit mask on S1.1
+        cmp.b   #00000100B, R6          ; if S2 was pressed (sets to 0 when pressed)
+        jeq     finalDelayS1P1
+        mov.b   &P1IN, R6               ; copy value of the input signal  
+        and.b   #00000110B, R6          ; bit mask on S1.1
+        cmp.b   #00000010B, R6          ; if S2 was pressed (sets to 0 when pressed)
+        jeq     finalDelayS1P2
+        jmp     FinalChoice
+        
+finalDelayS1P1:
+        call    #delay
+        mov.b   &P1IN, R6               ; copy value of the input signal again to check if it was really pressed
+        and.b   #00000110B, R6          ; bit mask on S1.1
+        cmp.b   #00000110B, R6          ; it's no longer pressed and no long presses
+        jne     FinalChoice        ; (if not released go back) if S1 was NOT released after being pressed or wasn't really pressed correctly ?
+        jmp     endChoice               ;(changed to a jne jump to remove bug when S1 is held down)
+       
+finalDelayS1P2:
+        call    #delay
+        mov.b   &P1IN, R6               ; copy value of the input signal again to check if it was really pressed
+        and.b   #00000110B, R6          ; bit mask on S1.1
+        cmp.b   #00000110B, R6          ; it's no longer pressed and no long presses
+        jne     FinalChoice        ; (if not released go back) if S1 was NOT released after being pressed or wasn't really pressed correctly ?
+        call    #programEnd
+ 
+endChoice:
+        mov     #2,LCDCMEMCTL
+        ret
+;==============================================================================
+; set the decimal point
+setPoint:
+        push.w  R7
+        cmp     #1,R7
+        jeq     setPoint1
+        jmp     setPoint2
+        
+setPoint1:
+        bis.b   #1,&0xA26
+        jmp     setPointEnd
+       
+setPoint2:
+        bis.b   #1,&0xA24
+        jmp     setPointEnd
+        
+setPointEnd:
+        pop     R7
+        ret
+        
+;===============================================================================        
+multiplySetup:
+        mov #0, R15  ; stores result
+        push.w R10 ; stores original value of num being added
+        push.w R13 
+        push.w R14 
+        cmp R13, R14 ; R14 >= R13
+        mov R14, R10 
+        jhs addR14  ; add R14, R13 times
+        mov R13, R10
+        jmp addR13  ; add R13, R14 times
+
+addR13:
+        add R10, R13
+        dec R14
+        cmp #1, R14 ; stop adding when R14 == 1 (prevents an extra addition)
+        jne addR13
+        mov R13, R15 ; store result
+        jmp endMultiplication
+        
+addR14:
+        add R10, R14
+        dec R13
+        cmp #1, R13 ; prevent extra addition
+        jne addR14
+        mov R14, R15
+        jmp endMultiplication
+
+endMultiplication:
+        pop R14
+        pop R13
+        pop R10
+        ret
+;===============================================================================
+simpleDivisionSetup:
+        push.w R10
+        mov #0, R10 ; quotient/counter, later moved into R14
+        jmp simpleDivision
+        
+simpleDivision: 
+        cmp R14, R13 ; if R13 < R14, division stops (R13 < 0)
+        jlo endDivision
+        sub R14, R13 ; R13 - R14 = R13
+        inc R10
+        jmp simpleDivision
+
+endDivision:
+        mov R10, R14 ; store the quotient
+        pop R10
+        ret
+;===============================================================================
 delay:
         push.w  R7
         call    #delay2
@@ -1009,7 +1683,13 @@ next2:
         ret
         
 programEnd:
-        mov     #2, &LCDCMEMCTL
+        mov     #2,LCDCMEMCTL
+        mov.b   #0x9F,&0xA29
+        mov.b   #0x00,&0xA2A
+        mov.b   #0x6C,&0xA25
+        mov.b   #0x82,&0xA26
+        mov.b   #0xF0,&0xA23
+        mov.b   #0x50,&0xA24
         JMP $                           ; jump to current location '$'
         NOP                             ; (endless loop)
         END
