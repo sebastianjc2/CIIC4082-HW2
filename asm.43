@@ -892,7 +892,7 @@ loopNumber2NoCap:
 
 loopNumber2Cap3:  
         cmp.b   #2,R7
-        jne     loopNumber2
+        jne     loopNumber2NoCap
         cmp.b   #4,R12                  ; 4 in R12 means the units was 3, and we also checked
                                         ; if R11 was 7 which means the tens was 6. 63 is max value
         
@@ -1866,11 +1866,12 @@ decimalResultFromBinary:
         xor.b   #0xFF,R4                      ; 2s comp
         inc     R4                      ; 2s comp
         mov.b   R4,bitResult            ; 2s comp
-        pop     R4
+        
         cmp     #1,isItSigned           ; 1 = signed
         jne     skip2scomp
         mov.b   #0x03,&0xA29
     skip2scomp:
+        pop     R4
         mov.b   #0,R7                    ;count for clear0
         mov.b   #0,R8                    ;count for fractionalPart
         mov.b   R4,R9                    ;wholePart Index
