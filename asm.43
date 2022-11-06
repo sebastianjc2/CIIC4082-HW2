@@ -94,10 +94,11 @@ isItSigned db 00000000B
 highBitAddress db  0xA25,0xA23,0xA32,0xA2E,0xA27   
 lowBitAddress  db  0xA26,0xA24,0xA33,0xA2F,0xA28
 
+align 1
 ;inputDecimal
-decimalNum  db 0,0,0,0,0,0
-decimalWhole db 0,0,0,0,0,0
-decimalFractional db 0,0,0,0,0,0
+decimalNum  db 0,0,0,0,0 
+decimalToBinWhole db 0,0,0,0,0,0
+decimalToBinFractional db 0,0,0,0,0
 
 
         RSEG    CSTACK                  ; pre-declaration of segment
@@ -410,6 +411,8 @@ askDecimalSpacesCall:
         call    #askDecimalSpaces
         call    #enterNumberSetup
         call    #storeDecimalInputInArraySetup
+        call    #splittingWholeAndFract2
+        call    #DecToBinConversion
         jmp     BitsOrDecimalEnd
         
 displayBinaryQuantityCall:
@@ -419,9 +422,9 @@ displayBinaryQuantityCall:
         jmp     BitsOrDecimalEnd
         
 BitsOrDecimalEnd:
-        ;call    #FinalChoice
-        ;mov     #2,LCDCMEMCTL
         ret
+        
+        
 ;====================================================================================
 storeDecimalInputInArraySetup:
         push.w  R6
@@ -434,37 +437,150 @@ storeDecimalInputInArraySetup:
         
 storeDecimalInputInArray:
         mov.b   R11,decimalNum(R6)
-        mov.b   decimalNum(R6),R7
         inc     R6
         mov.b   R12,decimalNum(R6)
-        mov.b   decimalNum(R6),R7
         inc     R6
         mov.b   R13,decimalNum(R6)
-        mov.b   decimalNum(R6),R7
         inc     R6
         mov.b   R14,decimalNum(R6)
-        mov.b   decimalNum(R6),R7
         inc     R6
         mov.b   R15,decimalNum(R6)
-        mov.b   decimalNum(R6),R7
         pop     R6
+        ret
+;====================================================================================
+splittingWholeAndFract2:
+        push.w  R7
+        push.w  R8                      ; used to multiply by 10
+        push.w  R5                      ; used to store the number of integers
+        mov     R7,R5                   ; store how many integers selected on R5 (P)
+        mov     #5,R6                   ; total of integers (5)
+        sub     R7,R6                   ; R6 is now Q (5-p)
+        ;mov     R6,R7                   ; R7 is now Q
+        ;add     R5,R7                   ; R7 = p+q
+        mov     #0,R4                   ; result for fractional part
+        mov     #0,R6                   ; result for integer part
+        cmp     #2,R5                 
+        jeq     getting2IntegersNum
+        jmp     getting1IntegersNum
+
+getting2IntegersNum:
+        mov     R11,R7
+        mov     #10,R8
+        call    #multiplySetup
+        add.b   R12,R9
+        mov     R9,R6
+        jmp     getting3DecimalsNum
+
+getting3DecimalsNum:
+        cmp     #0,R13
+        jeq     display0s
+        mov     R14,R7
+        mov     #10,R8
+        call    #multiplySetup
+        add.b   R15,R9
+        mov     R9,R4
+        mov     R13,R7
+        mov     #100,R8
+        call    #multiplySetup
+        add     R9,R4
+        jmp     endStoring2
+        
+display0s:
+        cmp     #6,R14
+        jlo     all0s
+        cmp     #3,R15
+        jlo     all0s        
+        mov     #0x01,R4
+        jmp     endStoring2
+        
+all0s:
+        mov     #0x00,R4
+        jmp     endStoring2
+
+getting1IntegersNum:
+        mov     R11,R6
+
+getting4DecimalsNum:
+        cmp     #0,R12
+        jeq     display0s2
+        mov     R14,R7
+        mov     #10,R8
+        call    #multiplySetup
+        add.b   R15,R9
+        mov     R9,R4
+        mov     R13,R7
+        mov     #100,R8
+        call    #multiplySetup
+        add     R9,R4
+        mov     R12,R7
+        mov     #1000,R8
+        call    #multiplySetup
+        add     R9,R4
+        jmp     endStoring2
+        
+display0s2:        
+        cmp     #6,R13
+        jlo     all0s2
+        cmp     #3,R14
+        jlo     all0s2     
+        mov     #0x01,R4
+        jmp     endStoring2
+        
+all0s2:
+        mov     #0x00,R4
+
+        
+endStoring2:
+        pop     R5
+        pop     R8
+        pop     R7
         ret
 ;====================================================================================
 splittingWholeAndFract:
         push.w  R6                      ; will be used as counter/index
         push.w  R8                      ; used to multiply by 10
         push.w  R5                      ; used to store the number of integers
-        mov     R7,R5                   ; store how many integers selected on R5
+        mov     R7,R5                   ; store how many integers selected on R5 (P)
         mov     #5,R6                   ; total of integers (5)
         sub     R7,R6                   ; R6 is now Q (5-p)
         mov     R6,R7                   ; R7 is now Q
-        add     R7,R5                   ; R5 + R7 = R5 = (p+q)
+        add     R5,R7                   ; R7 = p+q
+        mov     #0,R13
         mov     #0,R6                   ; init the iterator
-        mov     #0,R12                  ; result
-        mov     #0,R15                  ; result
+        mov     #0,R12                  ; result for integer part
+        mov     #0,R4                   ; result for fractional part
         mov     #10,R14                 ; factor
 
 decimalIntegerPart:
+        add.b     decimalNum(R6),R13
+        call    #multiplySetup          ; will multiply whatever is in R13 by 10 (from R14)
+                                        ; the multiplication will be stored on R15
+        inc     R6
+        mov     R13,R12                 ; stores result
+        mov     R15,R13 
+        cmp     R5,R6
+        jne     decimalIntegerPart
+        mov     #0,R13
+       
+decimalFractionalPart:
+        cmp     #4,R6
+        jeq     addLast
+        add.b   decimalNum(R6),R13
+        call    #multiplySetup          ; will multiply whatever is in R13 by 10 (from R14)
+                                        ; the multiplication will be stored on R15
+        inc     R6
+        mov     R13,R4                  ; stores result
+        mov     R15,R13 
+        cmp     R7,R6
+        jne     decimalFractionalPart
+        
+addLast:
+        add     R8,R13
+        mov     R13,R12
+        
+endStoring:
+        pop     R5
+        pop     R8
         ret
         
         
@@ -659,8 +775,6 @@ Number0S1P2Delay:
         mov     R10,R8                  ; stores which sign was selected (1=+, 0=-)
         jeq     enterNumber1
         jmp     enterNumber0
-;checkSign:;Check which sign was selected. 
-;        JEQ enterValue1
 
 loopNumber0:
         mov.b   #0x00,&0xA29            ; clear the default sign
@@ -766,6 +880,8 @@ Number2S1P2Delay:
 loopNumber2:  
         cmp.b   #7,R11
         jeq     loopNumber2Cap3
+        
+loopNumber2NoCap:
         CMP.b   #10,R12 
         JEQ     resetR12
         mov.b   digitsH(R12),&0xA23
@@ -773,10 +889,13 @@ loopNumber2:
         call    #setPoint
         inc     R12
         jmp     enterNumber2
-        
+
 loopNumber2Cap3:  
+        cmp.b   #2,R7
+        jne     loopNumber2
         cmp.b   #4,R12                  ; 4 in R12 means the units was 3, and we also checked
                                         ; if R11 was 7 which means the tens was 6. 63 is max value
+        
         JEQ     resetR12
         mov.b   digitsH(R12),&0xA23
         mov.b   digitsL(R12),&0xA24 
@@ -1269,6 +1388,470 @@ endEnterBit:
         ret     
 
 ;===============================================================================
+DecToBinConversion:
+        mov     #2,LCDCMEMCTL
+        mov     #0,R8                   ; index for fractional part part
+        mov     #0,R15                  ; index for decimal/fractional part
+        mov     #0,R14                  ; index for integer part
+
+integerPartToArray:
+        cmp     #2,R6
+        jlo     lowerThan2
+        cmp     #4,R6
+        jlo     lowerThan4
+        cmp     #8,R6
+        jlo     lowerThan8
+        cmp     #16,R6
+        jlo     lowerThan16
+        cmp     #32,R6
+        jlo     lowerThan32
+        cmp     #32,R6                  ; R6 > 32?
+        jge     moreThan32
+        mov     #0,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+
+lowerThan32:
+        cmp     #16,R6                  ; R6 > 16?
+        jge     moreThan16
+        mov     #0,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+        
+lowerThan16:
+        cmp     #8,R6                  ; R6 > 32?
+        jge     moreThan8
+        mov     #0,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+       ; call    #displayBinResult
+
+lowerThan8:
+        cmp     #4,R6                  ; R6 > 32?
+        jge     moreThan4
+        mov     #0,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+        
+lowerThan4:        
+        cmp     #2,R6                  ; R6 > 32?
+        jge     moreThan2
+        mov     #0,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+
+lowerThan2:
+        cmp     #1,R6                  ; R6 > 32?
+        jge     moreThan1
+        mov     #0,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+       ; call    #displayBinResult
+        jmp     FourOrThreeDecimals
+        
+moreThan32:
+        sub     #32,R6
+        mov     #1,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+        jmp     lowerThan32
+        
+moreThan16:
+        sub     #16,R6
+        mov     #1,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+        jmp     lowerThan16
+        
+moreThan8:
+        sub     #8,R6
+        mov     #1,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+        jmp     lowerThan8  
+        
+moreThan4:
+        sub     #4,R6
+        mov     #1,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+        jmp     lowerThan4
+        
+moreThan2:
+        sub     #2,R6
+        mov     #1,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14
+        ;call    #displayBinResult
+        jmp     lowerThan2
+        
+moreThan1:
+        sub     #1,R6
+        mov     #1,decimalToBinWhole(R14)
+        mov     decimalToBinWhole(R14),R8
+        push.w  R8
+        inc     R14 
+        ;call    #displayBinResult
+        
+FourOrThreeDecimals:
+        cmp     #2,R7
+        jeq     fractionalPartToArray
+        jmp     fractionalPartToArray1
+        
+fractionalPartToArray:
+        mov     #6,R13  ;new
+        sub     R14,R13 ;new
+        cmp     R13,R15
+        jeq     endDBConversion
+        mov     R4,R7
+        mov     #2,R8
+        call    #multiplySetup
+        mov     R9,R4
+        cmp     #1000,R9                ; if R9 > 1000, then put 1 in array, and sub 1000
+        jge     moreThan1000
+        jmp     lessThan1000
+        
+moreThan1000:
+        mov     #1,decimalToBinFractional(R15)
+        mov     decimalToBinFractional(R15),R11
+        push.w  R11
+        inc     R15
+        inc     R7
+        sub     #1000,R9
+        mov     R9,R4
+        ;call    #displayBinResult
+        jmp     fractionalPartToArray
+        
+lessThan1000:
+        mov     #0,decimalToBinFractional(R15)
+        mov     decimalToBinFractional(R15),R11
+        push.w  R11
+        inc     R15
+        inc     R7
+       ; call    #displayBinResult
+        jmp     fractionalPartToArray
+        
+        
+fractionalPartToArray1:
+        mov     #6,R13  ;new
+        sub     R14,R13 ;new
+        cmp     R13,R15
+        jeq     endDBConversion
+        mov     R4,R7
+        mov     #2,R8
+        call    #multiplySetup
+        mov     R9,R4
+        cmp     #10000,R9                ; if R9 > 10000, then put 1 in array, and sub 10000
+        jge     moreThan10000
+        jmp     lessThan10000
+        
+moreThan10000:
+        mov     #1,decimalToBinFractional(R15)
+        mov     decimalToBinFractional(R15),R11
+        push.w  R11
+        inc     R15
+        inc     R7
+        sub     #10000,R9
+        mov     R9,R4
+        ;call    #displayBinResult
+        jmp     fractionalPartToArray1
+        
+lessThan10000:
+        mov     #0,decimalToBinFractional(R15)
+        mov     decimalToBinFractional(R15),R11
+        push.w  R11
+        inc     R15
+        inc     R7
+       ; call    #displayBinResult
+        jmp     fractionalPartToArray1
+        
+endDBConversion:
+        jmp     reverseStack
+        
+      
+; reverse the top of the stack
+reverseStack:
+        pop     R15
+        pop     R9
+        pop     R7
+        pop     R13
+        pop     R6
+        pop     R4
+        cmp     #1,R5                   ; is the number signed?
+        jeq     decimalIsSigned
+
+reversedStack:
+
+        push.w  R15
+        push.w  R9
+        push.w  R7
+        push.w  R13
+        push.w  R6
+        push.w  R4
+        jmp     displayBinResult
+
+decimalIsSigned:
+        cmp     #1,R10                  ; is positive
+        jeq     reversedStack
+        xor.b   #BIT0,R15
+        xor.b   #BIT0,R9
+        xor.b   #BIT0,R7
+        xor.b   #BIT0,R13
+        xor.b   #BIT0,R6
+        xor.b   #BIT0,R4
+        jmp     reversedStack
+
+displayBinResult:
+        mov     #2,LCDCMEMCTL
+        mov     #0,R6                   ; counter
+        mov     #0,R13                  ; counter
+        mov     #0,R7                   ; counter
+        
+displaySetup:
+        cmp     R14,R6                ; if R14 != R6
+        jlo     displayWholePartBin
+        jmp     displayFractionalPartBin
+        
+displayWholePartBin:
+        pop     R9
+        ;mov     decimalToBinWhole(R6),R9
+        cmp     #1,R9
+        jeq     display1
+        jmp     display0
+        
+displayFractionalPartBin:
+        cmp     #6,R6
+        jeq     endDisplayBinaryPart
+        pop     R9
+        ;mov.b   decimalToBinFractional(R7),R9
+        inc     R7
+        cmp     #1,R9
+        jeq     display1Fractional
+        jmp     display0Fractional
+        
+        
+display1:
+        cmp     #0,R6
+        jeq     display1InSlot0
+        cmp     #1,R6
+        jeq     display1InSlot1
+        cmp     #2,R6
+        jeq     display1InSlot2
+        cmp     #3,R6
+        jeq     display1InSlot3
+        cmp     #4,R6
+        jeq     display1InSlot4
+        jmp     display1InSlot5
+   
+display0:   
+        cmp     #0,R6
+        jeq     display0InSlot0
+        cmp     #1,R6
+        jeq     display0InSlot1
+        cmp     #2,R6
+        jeq     display0InSlot2
+        cmp     #3,R6
+        jeq     display0InSlot3
+        cmp     #4,R6
+        jeq     display0InSlot4
+        jmp     display0InSlot5
+        
+display1InSlot0:
+        mov.b   #0x60,&0xA29
+        mov.b   #0x20,&0xA2A
+        inc     R6
+        jmp     displaySetup 
+        
+display1InSlot1:
+        mov.b   #0x60,&0xA25
+        mov.b   #0x20,&0xA26
+        inc     R6
+        jmp     displaySetup  
+        
+display1InSlot2:
+        mov.b   #0x60,&0xA23
+        mov.b   #0x20,&0xA24
+        inc     R6
+        jmp     displaySetup   
+        
+display1InSlot3:
+        mov.b   #0x60,&0xA32
+        mov.b   #0x20,&0xA33
+        inc     R6
+        jmp     displaySetup   
+        
+display1InSlot4:
+        mov.b   #0x60,&0xA2E
+        mov.b   #0x20,&0xA2F
+        inc     R6
+        jmp     displaySetup        
+display1InSlot5:
+        mov.b   #0x60,&0xA27
+        mov.b   #0x20,&0xA28
+        inc     R6
+        jmp     displaySetup
+        
+        
+        
+display0InSlot0:
+        mov.b   #0xFC,&0xA29
+        mov.b   #0x00,&0xA2A
+        inc     R6
+        jmp     displaySetup 
+        
+display0InSlot1:
+        mov.b   #0xFC,&0xA25
+        mov.b   #0x00,&0xA26
+        inc     R6
+        jmp     displaySetup  
+        
+display0InSlot2:
+        mov.b   #0xFC,&0xA23
+        mov.b   #0x00,&0xA24
+        inc     R6
+        jmp     displaySetup   
+        
+display0InSlot3:
+        mov.b   #0xFC,&0xA32
+        mov.b   #0x00,&0xA33
+        inc     R6
+        jmp     displaySetup   
+        
+display0InSlot4:
+        mov.b   #0xFC,&0xA2E
+        mov.b   #0x00,&0xA2F
+        inc     R6
+        jmp     displaySetup        
+        
+display0InSlot5:
+        mov.b   #0xFC,&0xA27
+        mov.b   #0x00,&0xA28
+        inc     R6
+        jmp     displaySetup
+        
+        
+        
+display1Fractional:
+        cmp     #0,R6
+        jeq     display1InSlot0Fractional
+        cmp     #1,R6
+        jeq     display1InSlot1Fractional
+        cmp     #2,R6
+        jeq     display1InSlot2Fractional
+        cmp     #3,R6
+        jeq     display1InSlot3Fractional
+        cmp     #4,R6
+        jeq     display1InSlot4Fractional
+        jmp     display1InSlot5Fractional
+   
+display0Fractional:   
+        cmp     #0,R6
+        jeq     display0InSlot0Fractional
+        cmp     #1,R6
+        jeq     display0InSlot1Fractional
+        cmp     #2,R6
+        jeq     display0InSlot2Fractional
+        cmp     #3,R6
+        jeq     display0InSlot3Fractional
+        cmp     #4,R6
+        jeq     display0InSlot4Fractional
+        jmp     display0InSlot5Fractional
+                
+display1InSlot0Fractional:
+        mov.b   #0x60,&0xA29
+        mov.b   #0x20,&0xA2A
+        inc     R6
+        jmp     displaySetup 
+        
+display1InSlot1Fractional:
+        mov.b   #0x60,&0xA25
+        mov.b   #0x20,&0xA26
+        inc     R6
+        jmp     displaySetup  
+        
+display1InSlot2Fractional:
+        mov.b   #0x60,&0xA23
+        mov.b   #0x20,&0xA24
+        inc     R6
+        jmp     displaySetup   
+        
+display1InSlot3Fractional:
+        mov.b   #0x60,&0xA32
+        mov.b   #0x20,&0xA33
+        inc     R6
+        jmp     displaySetup   
+        
+display1InSlot4Fractional:
+        mov.b   #0x60,&0xA2E
+        mov.b   #0x20,&0xA2F
+        inc     R6
+        jmp     displaySetup        
+display1InSlot5Fractional:
+        mov.b   #0x60,&0xA27
+        mov.b   #0x20,&0xA28
+        inc     R6
+        jmp     displaySetup
+        
+        
+        
+display0InSlot0Fractional:
+        mov.b   #0xFC,&0xA29
+        mov.b   #0x00,&0xA2A
+        inc     R6
+        jmp     displaySetup 
+        
+display0InSlot1Fractional:
+        mov.b   #0xFC,&0xA25
+        mov.b   #0x00,&0xA26
+        inc     R6
+        jmp     displaySetup  
+        
+display0InSlot2Fractional:
+        mov.b   #0xFC,&0xA23
+        mov.b   #0x00,&0xA24
+        inc     R6
+        jmp     displaySetup   
+        
+display0InSlot3Fractional:
+        mov.b   #0xFC,&0xA32
+        mov.b   #0x00,&0xA33
+        inc     R6
+        jmp     displaySetup   
+        
+display0InSlot4Fractional:
+        mov.b   #0xFC,&0xA2E
+        mov.b   #0x00,&0xA2F
+        inc     R6
+        jmp     displaySetup     
+        
+display0InSlot5Fractional:
+        mov.b   #0xFC,&0xA27
+        mov.b   #0x00,&0xA28
+        inc     R6
+        jmp     displaySetup
+        
+endDisplayBinaryPart:
+        ret
+;===============================================================================
 decimalResultFromBinary:
         mov     #2,LCDCMEMCTL
         push.w  R4
@@ -1619,35 +2202,35 @@ setPointEnd:
         
 ;===============================================================================        
 multiplySetup:
-        mov #0, R15  ; stores result
+        mov #0, R9  ; stores result
         push.w R10 ; stores original value of num being added
-        push.w R13 
-        push.w R14 
-        cmp R13, R14 ; R14 >= R13
-        mov R14, R10 
+        push.w R7 
+        push.w R8 
+        cmp R7, R8 ; R14 >= R13
+        mov R8, R10 
         jhs addR14  ; add R14, R13 times
-        mov R13, R10
+        mov R7, R10
         jmp addR13  ; add R13, R14 times
 
 addR13:
-        add R10, R13
-        dec R14
-        cmp #1, R14 ; stop adding when R14 == 1 (prevents an extra addition)
+        add R10, R7
+        dec R8
+        cmp #1, R8 ; stop adding when R14 == 1 (prevents an extra addition)
         jne addR13
-        mov R13, R15 ; store result
+        mov R7, R9 ; store result
         jmp endMultiplication
         
 addR14:
-        add R10, R14
-        dec R13
-        cmp #1, R13 ; prevent extra addition
+        add R10, R8
+        dec R7
+        cmp #1, R7 ; prevent extra addition
         jne addR14
-        mov R14, R15
+        mov R8, R9
         jmp endMultiplication
 
 endMultiplication:
-        pop R14
-        pop R13
+        pop R8
+        pop R7
         pop R10
         ret
 ;===============================================================================
