@@ -1,19 +1,19 @@
 ;Register Uses
-; R4: Stores 1 if D->B, stores 0 if B->D
-; R5: Stores 1 if signed, stores 0 if unsigned
+; R4: Stores 1 if D->B, stores 0 if B->D. Stores los bits escogidos para la parte de bin to dec
+; R5: Stores 1 if signed, stores 2 if unsigned
 ; R6: used for helping read user input from buttons
 ; R7: used for delay inside it's own subroutine,
 ;     stores how many integers for a decimal input (1 or 2)
 ;     1 if 1 integer, 2 if 2 integers
 ; R8: used to index through arrays in the screens
 ; R9: used to store the whole part's index of the binary number to index through
-; R10: used to store the sign for both decimal (+=1, 0=-) and binaries (1=neg or 0=pos)
+; R10: used to store the sign for both decimal (+=1, 0=-) and binaries (1=neg or 2=pos)
 ; R11-R15: used to store the numbers being inputted
 ; R12: also stores the whole Part of a binary->dec (the P) later
 ; R13: also used as an index for the bin-> dec conversion sum
 ; R14: Stores the user input for bin -> dec conversion
 ; R15: also used in bin->dec as a placeholder
-
+; basically all of them are used for the conversions.
 
 #include "msp430.h"                     ; #define controlled include file
 
@@ -26,23 +26,23 @@
         ORG     01c00h
 
 ;Names:   Sebast,Kevin,Jeremy,Sebast    names spelled in column
-INDEX0_H db 0xB7, 0x0E, 0x78, 0xB7      ; S, K, J, S
-INDEX0_L db 0x00, 0x22, 0x00, 0x00
+letter0_H db 0xB7, 0x0E, 0x78, 0xB7      ; S, K, J, S
+letter0_L db 0x00, 0x22, 0x00, 0x00
 
-INDEX1_H db 0x9F, 0x9F, 0x9F, 0x9F      ; E, E, E, E
-INDEX1_L db 0x00, 0x00, 0x00, 0x00
+letter1_H db 0x9F, 0x9F, 0x9F, 0x9F      ; E, E, E, E
+letter1_L db 0x00, 0x00, 0x00, 0x00
   
-INDEX2_H db 0xF1, 0x0C, 0xCF, 0xF1      ; B, V, R, B
-INDEX2_L db 0x50, 0x28, 0x02, 0x50
+letter2_H db 0xF1, 0x0C, 0xCF, 0xF1      ; B, V, R, B
+letter2_L db 0x50, 0x28, 0x02, 0x50
 
-INDEX3_H db 0xEF, 0x90, 0x9F, 0xEF      ; A, I, E, A
-INDEX3_L db 0x00, 0x50, 0x00, 0x00
+letter3_H db 0xEF, 0x90, 0x9F, 0xEF      ; A, I, E, A
+letter3_L db 0x00, 0x50, 0x00, 0x00
 
-INDEX4_H db 0xB7, 0x6C, 0x6C, 0xB7      ; S, N, M, S
-INDEX4_L db 0x00, 0x82, 0xA0, 0x00
+letter4_H db 0xB7, 0x6C, 0x6C, 0xB7      ; S, N, M, S
+letter4_L db 0x00, 0x82, 0xA0, 0x00
 
-INDEX5_H db 0x80, 0x00, 0x00, 0x80      ; T,  , Y, T
-INDEX5_L db 0x50, 0x00, 0xB0, 0x50
+letter5_H db 0x80, 0x00, 0x00, 0x80      ; T,  , Y, T
+letter5_L db 0x50, 0x00, 0xB0, 0x50
 
 ;Signed or unsigned letters:
 ;             S    U
@@ -134,8 +134,9 @@ setupDisplayAndPorts:
         mov #2, &LCDCMEMCTL             ; clear LCD memory (resets screen)
         bis #1, &LCDCCTL0               ; turn the LCD on
 
+;==================================================================================
 	call	#SetUp
-        call    #titleScreen
+        call    #titleScreenStart
         call    #displayNamesLoopCall
         call    #displaySignedScreenLoopCall
         call    #askConversion
@@ -143,21 +144,85 @@ setupDisplayAndPorts:
         call    #FinalChoice
         call    #main                   ; loop if they pressed S1P1 on FinalChoice
         
-;================================================================================
+;==========================================================================================
+; Objetivo: Hace el reset de todos los registros y array para que cuando se haga el reset,
+;           osea, cuando volvamos a empezar desde el principio despues de cada conversión,
+;           todo esté en cero y no hayan errores.
+; Precondiciones: La primera vez que se corra no hace falta ya que todo comienza en cero,
+;                pero para las próximas, las precondiciones son lo que se haya dejado en cada
+;                registro o array al finalizar la conversión. Siempre serán casos diferentes.
+; Postcondiciones: Todo estará reset, quedará como si estuviese corriendo el programa por 
+;                  primera vez.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 31/oct/2022
+;===========================================================================================
 SetUp:
+        ; clear decimalPartTotal byte array so it is all 0s when we start again after the first conversion
         push.w  R6
         mov     #0,R6
         mov.b   #0,decimalPartTotal(R6)
+        inc     R6
+        mov.b   #0,decimalPartTotal(R6)
+        inc     R6
+        mov.b   #0,decimalPartTotal(R6)
+        inc     R6
+        mov.b   #0,decimalPartTotal(R6)
+        inc     R6
+        mov.b   #0,decimalPartTotal(R6)
+        inc     R6
+        mov.b   #0,decimalPartTotal(R6)
         pop     R6
+        ; clear decimalNum byte array so it is all 0s when we start again after the first conversion
+        push.w  R6
+        mov     #0,R6
+        mov.b   #0,decimalNum(R6)
+        inc     R6
+        mov.b   #0,decimalNum(R6)
+        inc     R6
+        mov.b   #0,decimalNum(R6)
+        inc     R6
+        mov.b   #0,decimalNum(R6)
+        inc     R6
+        mov.b   #0,decimalNum(R6)
+        pop     R6
+        ; clear decimalToBinWhole byte array so it is all 0s when we start again after the first conversion
+        push.w  R6
+        mov     #0,R6
+        mov.b   #0,decimalToBinWhole(R6)
+        inc     R6
+        mov.b   #0,decimalToBinWhole(R6)
+        inc     R6
+        mov.b   #0,decimalToBinWhole(R6)
+        inc     R6
+        mov.b   #0,decimalToBinWhole(R6)
+        inc     R6
+        mov.b   #0,decimalToBinWhole(R6)
+        inc     R6
+        mov.b   #0,decimalToBinWhole(R6)
+        pop     R6
+        ; clear decimalToBinFractional byte array so it is all 0s when we start again after the first conversion
+        push.w  R6
+        mov     #0,R6
+        mov.b   #0,decimalToBinFractional(R6)
+        inc     R6
+        mov.b   #0,decimalToBinFractional(R6)
+        inc     R6
+        mov.b   #0,decimalToBinFractional(R6)
+        inc     R6
+        mov.b   #0,decimalToBinFractional(R6)
+        inc     R6
+        mov.b   #0,decimalToBinFractional(R6)
+        pop     R6
+        ; clear bitResult so it is all 0s when we start again after the first conversion
         and.b   #00000000B,bitResult
-	mov	#2,LCDCMEMCTL
-        clrc
-        clrN
-        clrZ
+	mov	#2,LCDCMEMCTL   ; clear display
+        clrc    ; clear carry so nothing from last conversion gets brought up when repeating the process
+        clrN    ; clear Negative flag so nothing from last conversion gets brought up when repeating the process
+        clrZ    ; clear Zero flag so nothing from last conversion gets brought up when repeating the process
         mov     #0,R4
         mov     #0,R5
-        mov     #0,R6   ; used for registering button presses
-        mov     #0,R7   ; used for delay purposes
+        mov     #0,R6   ; used for registering button presses (most of the screens up until the conversion)
+        mov     #0,R7   ; used for delay purposes 
         mov     #0,R8   ; used for indexing through arrays
         mov     #0,R9
         mov     #0,R10
@@ -167,72 +232,91 @@ SetUp:
         mov     #0,R14
         mov     #0,R15        
 	ret  
-;================================================================================
+;==========================================================================================
+; Objetivo: Mostrar la pantalla de inicio F(P.Q) en el LCD display. Hace return si lee que 
+;           el boton S1P1 fue presionado
+; Precondiciones: Todos los registros estarán en 0 ya que el Setup se llamó antes de esta subrutina
+; Postcondiciones: Todo seguirá en 0, ya que aunque R6 se usa para leer el input de los botones, 
+;                  se le hace push y pop dentro de la propia subrutina para que para las próximas 
+;                  no haya conflictos.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 27/oct/2022
+;===========================================================================================
 ; F(P.Q)
-titleScreen: 
+titleScreenStart: 
         mov.b #0x8E, &0xA29 ; F 
+        mov.b #0x00, &0xA2A
+        mov.b #0x00, &0xA25
         mov.b #0x22, &0xA26 ; (
         mov.b #0xCF, &0xA23 ; P
-        mov.b #0x01, &0xA24 ; .
+        bis.b #0x01, &0xA24 ; .
         mov.b #0xFC, &0xA32 ; Q
-        mov.b #0x02, &0xA33 ; Q (inner line)
+        mov.b #0x02, &0xA33 ; Q 
         mov.b #0x88, &0xA2F ; )
-        push.w R6 ; store original register value
-        jmp titleScreenInput 
+        push.w R6 
 
-titleScreenInput: ; check s1.1 button presses
-        mov.b   &P1IN, R6               ; copy value of the input signal  
-        and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000100B, R6          ; if S1 was pressed (sets to 0 when pressed)
+titleScreenInput: 
+        mov.b   &P1IN, R6              
+        and.b   #00000110B, R6          
+        cmp.b   #00000100B, R6          
         jeq     titleScreenDelay
         jmp     titleScreenInput
         
 titleScreenDelay:
         call    #delay
-        mov.b   &P1IN, R6               ; copy value of the input signal again to check if it was really pressed
-        and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000110B, R6          ; it's no longer pressed and no long presses
-        jne     titleScreenInput        ; (if not released go back) if S1 was NOT released after being pressed or wasn't really pressed correctly ?
+        mov.b   &P1IN, R6              
+        and.b   #00000110B, R6          
+        cmp.b   #00000110B, R6          
+        jne     titleScreenInput        ; (if not released go back)
                                         ;(changed to a jne jump to remove bug when S1 is held down)
         pop     R6
         mov     #2, &LCDCMEMCTL         ; clear screen
         ret
         
         
-;============================================================================        
+;==========================================================================================
+; Objetivo: Mostrar los nombres de los integrantes del equipo. Si S1P1 es presionado en esta pantalla,
+;           cambia de nombre, si S1P2 es presionado, hace return.
+; Precondiciones: Todos los registros estarán en 0.
+; Postcondiciones: Todo seguirá en 0, ya que aunque R6 se usa para leer el input de los botones, 
+;                  y R8 se usa como index para ayudar con el display y cambio de nombres,
+;                  se les hace push y pop dentro de la propia subrutina para que para las próximas 
+;                  no haya conflictos.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 27/oct/2022
+;===========================================================================================
 displayNamesLoopCall:
         push.w  R6                      ; used for button presses
         push.w  R8                      ; used for indexing names
         mov     #0,R8                   ; start at the first name
-        jmp     displayNames
 
-displayNames:
+NameDisplay:
         mov     #2,LCDCMEMCTL
         cmp.b   #4, R8
         jeq     resetNameIndex
-        mov.b   INDEX0_H (R8), &0xA29
-        mov.b   INDEX0_L (R8), &0xA2A
-        mov.b   INDEX1_H (R8), &0xA25
-        mov.b   INDEX1_L (R8), &0xA26
-        mov.b   INDEX2_H (R8), &0xA23
-        mov.b   INDEX2_L (R8), &0xA24
-        mov.b   INDEX3_H (R8), &0xA32
-        mov.b   INDEX3_L (R8), &0XA33
-        mov.b   INDEX4_H (R8), &0xA2E
-        mov.b   INDEX4_L (R8), &0xA2F
-        mov.b   INDEX5_H (R8), &0xA27
-        mov.b   INDEX5_L (R8), &0xA28
+        mov.b   letter0_H(R8), &0xA29
+        mov.b   letter0_L(R8), &0xA2A
+        mov.b   letter1_H(R8), &0xA25
+        mov.b   letter1_L(R8), &0xA26
+        mov.b   letter2_H(R8), &0xA23
+        mov.b   letter2_L(R8), &0xA24
+        mov.b   letter3_H(R8), &0xA32
+        mov.b   letter3_L(R8), &0XA33
+        mov.b   letter4_H(R8), &0xA2E
+        mov.b   letter4_L(R8), &0xA2F
+        mov.b   letter5_H(R8), &0xA27
+        mov.b   letter5_L(R8), &0xA28
         inc     R8
         jmp     displayNamesLoop        
 
 resetNameIndex:
         clr     R8
-        jmp     displayNames
+        jmp     NameDisplay
         
 displayNamesLoop:
-        mov.b   &P1IN, R6               ; copy value of the input signal  
-        and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000100B, R6          ; if S1 was pressed (sets to 0 when pressed)
+        mov.b   &P1IN, R6                
+        and.b   #00000110B, R6           
+        cmp.b   #00000100B, R6           
         jeq     displayNamesDelay 
         mov.b   &P1IN, R6
         and.b   #00000110B, R6
@@ -242,11 +326,11 @@ displayNamesLoop:
 
 displayNamesDelay:
         call    #delay
-        mov.b   &P1IN, R6               ; copy value of the input signal to check if button was released after pressing
-        and.b   #00000110B, R6          ; bit mask on S1.1
-        cmp.b   #00000110B, R6          ; (change to check if it was released) if still holding it down: 
-        jeq     displayNames            ; (changed to if released display next name)go back, keep checking for input
-        jmp     displayNamesLoop        ; (changed to if buttons are not released then loop back) if it was released: then display next name
+        mov.b   &P1IN, R6               
+        and.b   #00000110B, R6          
+        cmp.b   #00000110B, R6          ; (change to check if it was released) 
+        jeq     NameDisplay            ; (changed to if released display next name)
+        jmp     displayNamesLoop        ; (changed to if buttons are not released then loop back) 
 
 releasedS2InDisplayNames:
         call    #delay
@@ -261,7 +345,16 @@ endDisplayNames:
         pop     R6
         mov     #2,LCDCMEMCTL
         ret
-;===============================================================================
+;==========================================================================================
+; Objetivo: Mostrar la pregunta de S/U? en la pantalla para que los usuarios puedan seleccionar
+;           entre un numero signed y un numero unsigned. S1P1 itera entre las opciones (S o U), 
+;           y S1P2 confirma la selección y hace return.
+; Precondiciones: Todos los registros estarán en 0.
+; Postcondiciones: R5 va a contener la respuesta (Signed or Unsigned). Si en R5 contiene un 2,
+;                  significa que se eligió unsigned, y si tiene un 1 significa que se eligió signed
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 30/oct/2022
+;===========================================================================================
 displaySignedScreenLoopCall:
         mov.b   #0xB7, &0xA29 ; S
         mov.b   #0x28, &0xA26 ; /
@@ -277,32 +370,31 @@ displaySignedScreenLoopCall:
         jmp     signedInputLoop
 
 signedInputLoop:
-        ; Check S1.1/2 button presses
         mov.b &P1IN, R6     
-        and.b #00000110B, R6 ; bit mask on S1.1/2
-        cmp.b #00000100B, R6 ; if S1.1 is pressed
+        and.b #00000110B, R6 
+        cmp.b #00000100B, R6
         jeq signedS1P1Debounce
         mov.b &P1IN,R6
         and.b #00000110B, R6
-        cmp.b #00000010B, R6 ; if S1.2 is pressed
+        cmp.b #00000010B, R6
         jeq signedS1P2Debounce
-        jmp signedInputLoop ; continue to cycle for input
+        jmp signedInputLoop 
 
 signedS1P1Debounce:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
         cmp.b   #00000110B,R6
-        jeq     SignedOrUnsignedCall            ; (changed to if released) if still pressed, keep checking
-        jmp     signedInputLoop                 ; both operations for the signed subroutines end the same
+        jeq     SignedOrUnsignedCall            ; (changed to if released) 
+        jmp     signedInputLoop                 ; keep checking if it's still held down
         
 signedS1P2Debounce:
         call    #delay
         mov.b   &P1IN,R6
         and.b   #00000110B,R6
-        cmp.b   #00000110B,R6                   ; (changed to if released) if still pressed
+        cmp.b   #00000110B,R6                   ; (changed to if released)
         jeq     signedEnd
-        jmp     signedInputLoop                 ; both operations for the signed subroutines end the same
+        jmp     signedInputLoop                 
 
 SignedOrUnsignedCall:
         mov.b   #0x00, &0xA27                   ; clear the S (default value)
@@ -328,7 +420,18 @@ signedEnd:
         pop     R6
         ret
 
-;===============================================================================        
+;==========================================================================================
+; Objetivo: Mostrar la pregunta de D/B? en la pantalla para que los usuarios puedan seleccionar
+;           entre una conversión de decimal a binario, o binario a decimal. S1P1 itera entre 
+;           las opciones (Y or N), y S1P2 confirma la selección y hace return.
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned
+; Postcondiciones: R5 va a contener la respuesta (Signed or Unsigned). R4 contendrá la selección 
+;                 si será de decimal a binario, o binario a decimal. Si R4 contiene un 1, quiere 
+;                 decir que el usuario seleccióno Y (Yes, de decimal a binario). Si R4 contiene
+;                 un 2, significa que el usuario seleccionó N (No, de binario a decimal).
+; Autor: Jeremy Caban y Sebastian Caballero
+; Fecha: 29/oct/2022
+;===========================================================================================  
 askConversion:
         mov.b   #0xF0, &0xA29           ;D
         mov.b   #0x50, &0xA2A
@@ -398,7 +501,19 @@ endAskConversion:
         pop     R6
         mov     #2,&LCDCMEMCTL
         ret       
-;===================================================================================
+;==========================================================================================
+; Objetivo: Es basicamente una subrutina que hace un big "If, else". Si R4 contiene un 1, va a hacer 
+;           call a las subrutinas que trabajan con la conversión de decimal a binario. Si R4 tiene
+;           un 4, va a hacer call a las subrutinas que trabajan con la conversión de binario a decimal.
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                si será de decimal a binario, o de binario a decimal.
+; Postcondiciones: después de llamar a todas las subrutinas de either decimal a binario, o de binario
+;                  a decimal hace return. Como terminó llamando las conversiones al final, ya lo que guarden
+;                  los registros no hacen falta porque ya se mostró la conversion. Se explicará lo que guarda
+;                  cada registro en los pasos de esta subrutina en sus respectivas subrutinas.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 2/nov/2022
+;===========================================================================================  
 BitsOrDecimalSelection:
         cmp     #0,R4
         jeq     displayBinaryQuantityCall
@@ -425,7 +540,20 @@ BitsOrDecimalEnd:
         ret
         
         
-;====================================================================================
+;==========================================================================================
+; Objetivo: Restarle 1 a cada registro del R11 al R15 para guardar correctamente el input del numero,
+;           y guardar el input en un array (decimalNum).
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                si será de decimal a binario, o de binario a decimal. R7 guarda cuantos digitos 
+;                (enteros) fueron seleccionados para la parte decimal. R10 guarda el signo si fue escogido.
+;               R11 al R15 guardan los clicks del botón cuando se hizo el input.
+; Postcondiciones: R11 al R15 ahora guardan el numero que se hizo input en cada posición. Ejemplo:
+;                Si el input fue 1.2345, R11 guarda 1, R12 guarda 2, R13 guarda 3, R14 guarda 4, R15 guarda 5.
+;                Todos los demás registros permanecen igual. En el array decimalNum ahora están los números
+;                guardados igual que en los registros (decimalNum = 1,2,3,4,5)
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 4/nov/2022
+;===========================================================================================  
 storeDecimalInputInArraySetup:
         push.w  R6
         mov     #0,R6
@@ -447,7 +575,21 @@ storeDecimalInputInArray:
         mov.b   R15,decimalNum(R6)
         pop     R6
         ret
-;====================================================================================
+;==========================================================================================
+; Objetivo: Guardar la parte entera del número en un array(decimalToBinWhole) y a un registro,
+;           y la parte fraccional en otro (decimalToBinFractional)
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                si será de decimal a binario, o de binario a decimal. R7 guarda cuantos digitos 
+;                (enteros) fueron seleccionados para la parte decimal. R10 guarda el signo si fue escogido.
+;               R11 al R15 guardan los números del input.
+; Postcondiciones: R4 termina con la parte fraccional (como en el ejemplo anterior la parte fraccional
+;                  fue 2345, R4 termina con 0x929 que es 2345). R6 termina con la parte decimal (en el 
+;                  de 1.2345, R6 termina con 1). R9 termina con la ultima multiplicaion que se hizo,
+;                  pero no es relevante. Los arrays son cambiados a esos numeros.
+;                  Todos los demás registros permanecen iguales.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 4/nov/2022
+;===========================================================================================  
 splittingWholeAndFract2:
         push.w  R7
         push.w  R8                      ; used to multiply by 10
@@ -535,56 +677,19 @@ endStoring2:
         pop     R8
         pop     R7
         ret
-;====================================================================================
-splittingWholeAndFract:
-        push.w  R6                      ; will be used as counter/index
-        push.w  R8                      ; used to multiply by 10
-        push.w  R5                      ; used to store the number of integers
-        mov     R7,R5                   ; store how many integers selected on R5 (P)
-        mov     #5,R6                   ; total of integers (5)
-        sub     R7,R6                   ; R6 is now Q (5-p)
-        mov     R6,R7                   ; R7 is now Q
-        add     R5,R7                   ; R7 = p+q
-        mov     #0,R13
-        mov     #0,R6                   ; init the iterator
-        mov     #0,R12                  ; result for integer part
-        mov     #0,R4                   ; result for fractional part
-        mov     #10,R14                 ; factor
 
-decimalIntegerPart:
-        add.b     decimalNum(R6),R13
-        call    #multiplySetup          ; will multiply whatever is in R13 by 10 (from R14)
-                                        ; the multiplication will be stored on R15
-        inc     R6
-        mov     R13,R12                 ; stores result
-        mov     R15,R13 
-        cmp     R5,R6
-        jne     decimalIntegerPart
-        mov     #0,R13
-       
-decimalFractionalPart:
-        cmp     #4,R6
-        jeq     addLast
-        add.b   decimalNum(R6),R13
-        call    #multiplySetup          ; will multiply whatever is in R13 by 10 (from R14)
-                                        ; the multiplication will be stored on R15
-        inc     R6
-        mov     R13,R4                  ; stores result
-        mov     R15,R13 
-        cmp     R7,R6
-        jne     decimalFractionalPart
-        
-addLast:
-        add     R8,R13
-        mov     R13,R12
-        
-endStoring:
-        pop     R5
-        pop     R8
-        ret
-        
-        
-;====================================================================================
+;==========================================================================================
+; Objetivo: La subrutina muestra la pregunta de 1/2? en la pantalla, para que el usuario escoja
+;           entre 1 o 2 enteros si previamente se había escogido la conversion de decimal a binario
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                si será de decimal a binario, o de binario a decimal.
+; Postcondiciones: R7 guarda cuantos digitos (enteros) fueron seleccionados para la parte decimal.
+;                  Si se escogieron 2, R7 guardaará 2, y si se escogió 1, R7 guardará 1.
+;                  R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                  si será de decimal a binario, o de binario a decimal. 
+; Autor: Kevin Burgos
+; Fecha: 1/nov/2022
+;===========================================================================================  
 askDecimalSpaces:
         mov.b   #0x60, &0xA29; 1
         mov.b   #0x20, &0xA2A ; 1 (inner line)
@@ -650,9 +755,17 @@ endDecimalSpace:
         pop     R6
         ret
 
-;=========================================================================================
-; ; Subroutine for selection of decimal spaces to convert. 
-
+;==========================================================================================
+; Objetivo: La subrutina muestra la pregunta de Bits? en la pantalla, para que el usuario escoja
+;           entre 0 a 6 bits para la parte entera del numero binario (la P) si previamente se había 
+;           escogido la conversion de binario a decimal.
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                si será de decimal a binario, o de binario a decimal.
+; Postcondiciones: R4 cambia a guardar cuantos bits fueron escogidos para la parte entera (P). Del 0 al 6,
+;                  R4 guarda ese valor seleccionado. (Ejemplo: si se escogió 6 digitos, R4 guardará 6).
+; Autor: Sebastian Bibiloni
+; Fecha: 1/nov/2022
+;===========================================================================================  
 displayBinaryQuantity: 
         mov.b  #0xF1, &0xa29   ;B
         mov.b  #0x50, &0xA2A   ;B
@@ -724,7 +837,21 @@ endAskQuantity:
         mov     #2,&LCDCMEMCTL          ; clear display        
         ret
 ;==========================================================================================
-; Subroutine for selection of decimal number to convert. 
+; Objetivo: Dejar que el usuario haga el input del numero. Se mostrará 00000 al comenzar. Se mostrará
+;           el signo positivo si se escogió la opción de signed. Y se mostrará el punto en el lugar
+;           adecuado dependiendo si se escogieron 1 o 2 decimales enteros.
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                si será de decimal a binario, o de binario a decimal. R7 guarda cuantos digitos 
+;                (enteros) fueron seleccionados para la parte decimal.
+; Postcondiciones: En R4, R5 y R7 no hay cambios. En R10 se guarda el signo (solo si se había escogido
+;                  la opción de signed previamente). R10 sería 1 si el signo es positivo, y 2 si es negativo.
+;                  De R11 a R15 se guardan las veces que se presionó el boton, reseteando cada vez que vuelve
+;                  a comenzar en 0. Ejemplo: Si se escogió 1.2345, R11 guardará 2, R12 3, R13 4, R14 5, y R15 6.
+;                  Se guarda 1 más que el digito escogido ya que esas fueron las veces que se presionó el botón.
+;                  Esto se corrige restándole 1 a esos registros en una subrutina siguiente.
+; Autor: Sebastian Caballero y Sebastian Bibiloni
+; Fecha: 2/nov/2022
+;===========================================================================================  
 enterNumberSetup:
         MOV.W #2 , &LCDCMEMCTL ;CLEAR LCD
         mov.b #0xFC,&0xa25   ; 0
@@ -875,8 +1002,6 @@ Number2S1P2Delay:
         cmp.b   #00000110B,R6
         jeq     enterNumber3
         jmp     enterNumber2
-;checkSign:;Check which sign was selected. 
-;        JEQ enterValue1
 
 loopNumber2:  
         cmp.b   #7,R11
@@ -936,10 +1061,12 @@ Number3S1P2Delay:
         cmp.b   #00000110B,R6
         jeq     enterNumber4
         jmp     enterNumber3
-;checkSign:;Check which sign was selected. 
-;        JEQ enterValue1
+
 
 loopNumber3:  
+        cmp     #2,R7
+        jne     notMaxValue             ; even if 6, 3 was entered in the first 2, if R7 is 1, would mean that
+                                        ; the number is 6.3 and not 63, so it's not the max value.
         cmp     #7,R11                  ; tens is 6
         jne     notMaxValue
         cmp     #4,R12                  ; units is 3
@@ -994,6 +1121,9 @@ Number4S1P2Delay:
 ;        JEQ enterValue1
 
 loopNumber4:
+        cmp     #2,R7
+        jne     notMaxValue2             ; even if 6, 3 was entered in the first 2, if R7 is 1, would mean that
+                                        ; the number is 6.3 and not 63, so it's not the max value.
         cmp     #7,R11                  ; tens is 6
         jne     notMaxValue2
         cmp     #4,R12                  ; units is 3
@@ -1047,6 +1177,9 @@ Number5S1P2Delay:
 ;        JEQ enterValue1
 
 loopNumber5: 
+        cmp     #2,R7
+        jne     notMaxValue3             ; even if 6, 3 was entered in the first 2, if R7 is 1, would mean that
+                                        ; the number is 6.3 and not 63, so it's not the max value.
         cmp     #7,R11                  ; tens is 6
         jne     notMaxValue3
         cmp     #4,R12                  ; units is 3
@@ -1076,8 +1209,16 @@ endEnterNumber:                         ; number was selected end subroutine
         mov     #2,&LCDCMEMCTL
         ret     
        
-;==============================================================================
-; Subroutine for selection of binary number to convert. 
+;==========================================================================================
+; Objetivo: Dejar que el usuario haga el input del numero binario. Se mostrará 00000 al comenzar. 
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                 de cuantos bits para la parte P.
+; Postcondiciones: Hay cambios en los registros de R10 a R15 que ayudan en el input de los numeros
+;                  y guardarlos en el array. El mayor cambio es que bitResult pasa de 00000000B, a
+;                  guardar el numero que fue inputted.
+; Autor: Sebastian Bibiloni, Sebastian Caballero y Jeremy Caban
+; Fecha: 2/nov/2022
+;===========================================================================================  
 enterBitsSetup:
         MOV.W #2 , &LCDCMEMCTL ;CLEAR LCD
         mov.b #0xFC,&0xA29   ; 0
@@ -1388,7 +1529,20 @@ endEnterBit:
         pop     R6
         ret     
 
-;===============================================================================
+;==========================================================================================
+; Objetivo: Hacer la conversión de Decimal a Binario y mostrarla en el LCD.
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                si será de decimal a binario, o de binario a decimal. R7 guarda cuantos digitos 
+;                (enteros) fueron seleccionados para la parte decimal. R10 guarda el signo si fue escogido.
+;               R11 al R15 guardan los numeros inputted, al igual que los arrays y R4 y R6 guardan las partes
+;               fraccionales y enteras.
+; Postcondiciones: Cambian la mayoría de los registros, ya que se usaron para la conversión de alguna
+;                  manera u otra. Los valores que se obtuvieron al final no importan ya que fue el ultimo paso
+;                  y no se usarán para nada que sean necesarios. Algunos se usaron para multiplicar, 
+;                  otros para guardar resultados temporeros, algunos como counters, otros como indexes, etc.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 5/nov/2022
+;===========================================================================================  
 DecToBinConversion:
         mov     #2,LCDCMEMCTL
         mov     #0,R8                   ; index for fractional part part
@@ -1852,7 +2006,19 @@ display0InSlot5Fractional:
         
 endDisplayBinaryPart:
         ret
-;===============================================================================
+
+;==========================================================================================
+; Objetivo: Hacer la conversión de Binario a Decimal y mostrarla en el LCD.
+; Precondiciones: R5 estará guardando la selección de Signed or Unsigned. R4 contendrá la seleccion
+;                 de cuantos bits para la parte P (entera). bitResult guarda el numero que se hizo
+;                  input
+; Postcondiciones: Cambian la mayoría de los registros, ya que se usaron para la conversión de alguna
+;                  manera u otra. Los valores que se obtuvieron al final no importan ya que fue el ultimo paso
+;                  y no se usarán para nada que sean necesarios. Algunos se usaron para multiplicar, 
+;                  otros para guardar resultados temporeros, algunos como counters, otros como indexes, etc.
+; Autor: Jeremy Caban
+; Fecha: 4/nov/2022
+;===========================================================================================  
 decimalResultFromBinary:
         mov     #2,LCDCMEMCTL
         push.w  R4
@@ -1900,7 +2066,7 @@ decimalResultFromBinary:
         mov.b   wholePart(R9),R15
         add     R15,R12
     skip:
-        cmp     #0,R9
+        cmp     #0,R9                   ;check if we finished extracting bits
         jne     roll
         
         ;--------------------------
@@ -1908,13 +2074,15 @@ decimalResultFromBinary:
         jeq     displayBinaryResult
         ;--------------------------
          
+;start of fractionalPart
 startFractionalPart:
-        cmp     R8,R11
+        cmp     R8,R11                  
         jeq     displayBinaryResult
         rla     R14
         jc      sumFractionalPart
         inc     R8
         jmp     startFractionalPart
+;add the corresponding digits to the total (decimalPartTotal array)
 sumFractionalPart:
         mov.b   #0,R13
         clrc
@@ -2006,12 +2174,13 @@ sumFractionalPart:
         
         inc     R8
         jmp     startFractionalPart
-        
+;displays the result of the conversion
 displayBinaryResult: ;-------from here changed
         mov.b   #0,R15          ;whole part has not taken up any displays yet
         mov.b   #0, R8
         cmp     #0,R12
         jeq     endOfWholePartDisplay
+    ;separate the 2 digits of a 2 digit number for display purposes
     wholePartDisplays:
         cmp     #10,R12
         jl      skipSub
@@ -2151,7 +2320,15 @@ onlyOneDigit:
 endBDConversion:
         ret
 
-;==============================================================================
+;==========================================================================================
+; Objetivo: Luego de mostrar las conversiones, estará checking el input de los botones para saber
+;           si volver al menu principal con el boton S1P1, o terminar el programa con el boton S1P2.
+; Precondiciones: Los registros guardados son que ayudaron al proceso de la conversión, pero ya no son
+;                 relevantes.
+; Postcondiciones: No hubo cambios. 
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 1/nov/2022
+;===========================================================================================  
 FinalChoice: ; check s1.1 button presses
         mov.b   &P1IN, R6               ; copy value of the input signal  
         and.b   #00000110B, R6          ; bit mask on S1.1
@@ -2182,8 +2359,13 @@ finalDelayS1P2:
 endChoice:
         mov     #2,LCDCMEMCTL
         ret
-;==============================================================================
-; set the decimal point
+;==========================================================================================
+; Objetivo: Ayudar a set el punto decimal en su lugar correcto para la parte de inputting el numero decimal.
+; Precondiciones: Depende de cuando se llame.
+; Postcondiciones: Setea el punto donde va, either en 0xA24 o en 0xA26. No hay cambios de registros
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 4/nov/2022
+;===========================================================================================  
 setPoint:
         push.w  R7
         cmp     #1,R7
@@ -2202,32 +2384,39 @@ setPointEnd:
         pop     R7
         ret
         
-;===============================================================================        
+;==========================================================================================
+; Objetivo: Multiplicar. Se suma el valor del registro tantas veces (depende del valor del 
+;           otro registro) con si mismo.
+; Precondiciones: R7 guarda un valor, y el R8 guarda el otro valor (los 2 que se van a multiplicar).
+; Postcondiciones: R9 guarda el resultado de la multiplicacion. 
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 3/nov/2022
+;===========================================================================================  
 multiplySetup:
-        mov #0, R9  ; stores result
-        push.w R10 ; stores original value of num being added
-        push.w R7 
-        push.w R8 
-        cmp R7, R8 ; R14 >= R13
+        mov #0, R9  ; resultado
+        push.w R10 ; copy
+        push.w R7  ; valor 1
+        push.w R8  ; valor 2
+        cmp R7, R8 ; para ver cual se va añadir cuantas veces
         mov R8, R10 
-        jhs addR14  ; add R14, R13 times
+        jhs multbyR8  
         mov R7, R10
-        jmp addR13  ; add R13, R14 times
+        jmp multbyR7  ; else 
 
-addR13:
+multbyR7:
         add R10, R7
         dec R8
-        cmp #1, R8 ; stop adding when R14 == 1 (prevents an extra addition)
-        jne addR13
-        mov R7, R9 ; store result
+        cmp #1, R8  
+        jne multbyR7
+        mov R7, R9 ; resultado
         jmp endMultiplication
         
-addR14:
+multbyR8:
         add R10, R8
         dec R7
-        cmp #1, R7 ; prevent extra addition
-        jne addR14
-        mov R8, R9
+        cmp #1, R7 
+        jne multbyR8
+        mov R8, R9 ; resultado
         jmp endMultiplication
 
 endMultiplication:
@@ -2235,30 +2424,27 @@ endMultiplication:
         pop R7
         pop R10
         ret
-;===============================================================================
-simpleDivisionSetup:
-        push.w R10
-        mov #0, R10 ; quotient/counter, later moved into R14
-        jmp simpleDivision
-        
-simpleDivision: 
-        cmp R14, R13 ; if R13 < R14, division stops (R13 < 0)
-        jlo endDivision
-        sub R14, R13 ; R13 - R14 = R13
-        inc R10
-        jmp simpleDivision
 
-endDivision:
-        mov R10, R14 ; store the quotient
-        pop R10
-        ret
-;===============================================================================
+;==========================================================================================
+; Objetivo: Delay/Debouncing
+; Precondiciones: No hay cambio.
+; Postcondiciones: No hay cambio, ya que R7 se usa para el delay, pero se pushea y pop en la misma subrutina.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 29/oct/2022
+;===========================================================================================  
 delay:
         push.w  R7
         call    #delay2
         pop     R7
         ret
-        
+
+;==========================================================================================
+; Objetivo: Delay/Debouncing. Hace el delay como tal cuando es llamado por la subrutina de delay.
+; Precondiciones: No hay cambio.
+; Postcondiciones: No hay cambio, ya que R7 se usa para el delay, pero se pushea y pop en la misma subrutina.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 29/oct/2022
+;===========================================================================================  
 delay2:
         mov     #0x0fff,R7
         jmp     next2
@@ -2266,7 +2452,15 @@ next2:
         dec     R7
         jnz     next2
         ret
-        
+
+;==========================================================================================
+; Objetivo: El fin del programa. Hace clear a la pantalla y luego muestra la palabra "End" para que se sepa
+;           que terminó el programa.
+; Precondiciones: No hay cambio.
+; Postcondiciones: No hay cambio.
+; Autor: Sebastian J. Caballero Díaz
+; Fecha: 29/oct/2022
+;===========================================================================================  
 programEnd:
         mov     #2,LCDCMEMCTL
         mov.b   #0x9F,&0xA29
